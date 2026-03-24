@@ -81,8 +81,8 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
   if (mode === "founder_os_repo") {
     return [
       {
-        title: `Turn ${companyName}'s founder-OS thesis into a buyer-facing homepage narrative`,
-        description: `Rewrite the homepage framing so Northstar reads as a kanban-first operating system for non-technical founders, not a repo or internal workflow tool.`,
+        title: `Make ${companyName}'s board-first value obvious to a non-technical founder in one screen`,
+        description: `Rewrite the opening narrative so a founder understands in seconds that ${companyName} turns website context into a prioritized growth board with approvals, not another AI chat pane.`,
         type: "HOMEPAGE_COPY_SUGGESTION",
         source: "SYSTEM",
         impact: 9,
@@ -90,9 +90,9 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
         confidence: 8,
         goal_fit: 9,
         rationale: buildRationale(
-          `The current repo surface proves the workflow, but it still hides the clearest product promise behind implementation language.`,
-          `This ranks first because better founder-facing positioning will improve every other acquisition and explanation task downstream.`,
-          `A clearer thesis should help non-technical founders understand the product faster and see Northstar as a growth operating system rather than a repo-backed QA tool.`
+          `The current repo proves the workflow, but it still makes the founder infer too much about why the board is the actual product.`,
+          `This ranks first because if the first screen does not land the board-first promise, the rest of the backlog reads like implementation detail instead of leverage.`,
+          `A sharper first-screen narrative should improve demo conversion, founder trust, and willingness to explore the generated board.`
         )
       },
       {
@@ -112,7 +112,7 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
       },
       {
         title: `Draft a blog brief on why non-technical founders need a board, not another chat thread`,
-        description: `Create a founder-approvable content brief that explains the Northstar operating model and why visible prioritization and approvals beat disconnected AI chats.`,
+        description: `Create a founder-approvable brief that turns Northstar's point of view into repeatable language a founder can use in demos, onboarding, and category positioning.`,
         type: "BLOG_BRIEF",
         source: "SYSTEM",
         impact: 8,
@@ -120,9 +120,9 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
         confidence: 8,
         goal_fit: 9,
         rationale: buildRationale(
-          `Northstar already has a strong point of view, but it needs a narrative artifact that translates that point of view into founder language.`,
-          `It stays near the top because it validates the approval flow while creating a reusable explanation for demos and content.`,
-          `A strong brief should make Northstar easier to pitch, easier to trust, and easier to share with another founder.`
+          `Northstar has a clear structural point of view, but it still needs sharper language that founders can repeat without sounding like generic AI tooling.`,
+          `It stays near the top because it validates the approval flow while creating a reusable founder-facing asset for demos, content, and sales conversations.`,
+          `A stronger brief should make Northstar easier to explain, easier to trust, and easier for founders to repeat to other founders.`
         )
       },
       {
