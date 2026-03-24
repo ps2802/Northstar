@@ -1,4 +1,4 @@
-# Founder OS Web
+# Northstar Web
 
 Frontend command center for the non-technical founder platform.
 
