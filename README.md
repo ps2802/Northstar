@@ -80,7 +80,21 @@ Kanban columns:
 - `packages/site-ingestion`: website ingestion and summary logic
 - `packages/task-engine`: task generation, scoring, and Kanban transitions
 - `packages/agent-core`: planner contracts and mocked blog-brief execution
-- `prisma/schema.prisma`: SQLite schema
+- `prisma/schema.prisma`: Prisma schema targeting Postgres for real deployments
+
+## Recommended database
+
+Use `Vercel Postgres` for the smallest production-sensible Vercel path.
+
+Why:
+- hosted persistent Postgres instead of local SQLite
+- Prisma works cleanly with pooled runtime connections plus a direct migration connection
+- it keeps the demo stack simple: Vercel web, Vercel API, hosted Postgres
+
+Northstar itself only expects these database env vars:
+
+- `DATABASE_URL`: pooled runtime connection string
+- `DIRECT_URL`: direct non-pooled migration connection string
 
 ## Local setup
 
@@ -90,34 +104,39 @@ Install dependencies:
 npm install
 ```
 
+Create `.env` from `.env.example` and point it at a Postgres database.
+
+The simplest local path is to use the same hosted Postgres database shape as production.
+For Vercel Postgres, copy:
+
+- the Prisma/pooling URL into `DATABASE_URL`
+- the non-pooling URL into `DIRECT_URL`
+
 Generate Prisma client:
 
 ```bash
 npx prisma generate
 ```
 
-Sync the SQLite schema:
+Apply the checked-in migration:
 
 ```bash
-npx prisma db push --accept-data-loss --skip-generate
+npx prisma migrate deploy
 ```
 
-Seed demo data:
+Seed demo data if you want a ready-made workspace:
 
 ```bash
 npm run db:seed
 ```
 
-## Important note about `.env`
-
-Because this workspace path contains a space, `.env` currently uses an absolute SQLite path for this machine.
-If you move the repo, update `DATABASE_URL` in `.env` to the new absolute `file:` path for `prisma/dev.db`.
-
-Example:
+Example `.env`:
 
 ```env
-DATABASE_URL="file:/absolute/path/to/your/repo/prisma/dev.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require&pgbouncer=true"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 PORT=4000
+VITE_API_BASE_URL="http://localhost:4000"
 ```
 
 ## Run locally
@@ -145,26 +164,46 @@ Default local URLs:
 - Web: `http://localhost:5173`
 - API: `http://localhost:4000`
 
-## Deployment path
+## Vercel deployment path
 
-Northstar is prepared for a simple Vercel deployment path:
+Northstar is set up for a simple Vercel deployment:
 
 - the Vite web app builds to `apps/web/dist`
 - production web requests call the API at `/api`
-- the Fastify app is shared between local dev and serverless entrypoints
-- the root `vercel.json` points Vercel at the monorepo build
+- the Fastify app is shared between local dev and the serverless entrypoint
+- Prisma migrations run during Vercel builds
+- Prisma targets hosted Postgres instead of local SQLite
 
 Deployment files in place:
 
 - `vercel.json`
 - `api/[...path].ts`
 - `apps/api/src/app.ts`
+- `docs/DEPLOY_VERCEL.md`
+- `prisma/migrations/0001_init/migration.sql`
 
-Important production note:
+Exact Vercel env vars:
 
-- the current database is SQLite for local demo work
-- SQLite is not a safe long-term production database for Vercel serverless
-- a real production launch should switch `DATABASE_URL` to an external persistent database before customer traffic
+- `DATABASE_URL`
+- `DIRECT_URL`
+
+Optional local-only env vars:
+
+- `PORT`
+- `VITE_API_BASE_URL`
+
+Exact deployment steps live in [`docs/DEPLOY_VERCEL.md`](./docs/DEPLOY_VERCEL.md).
+
+The current Vercel build command is:
+
+```bash
+npx prisma migrate deploy && npx prisma generate && npm run build
+```
+
+This means each deploy will:
+- apply checked-in migrations
+- generate Prisma client
+- build the API and web app
 
 ## Exact test flow
 

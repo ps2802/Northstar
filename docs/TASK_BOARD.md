@@ -19,7 +19,7 @@ This is the active build board for the project.
 
 - Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
 - Push the latest hardening commits to GitHub
-- Verify the Vercel deployment path and document the remaining production database gap
+- Verify the hosted Postgres-backed Vercel deployment path end to end
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
 
@@ -27,12 +27,12 @@ This is the active build board for the project.
 
 - Final demo hardening for `Northstar` as the primary live demo
 - Gridlock preparation as the secondary live demo case
+- Hosted Postgres deployment hardening for Vercel demo environments
 
 ## Blocked
 
 - Final launch ICP is not confirmed yet
 - Real artifact generation provider is not chosen yet
-- Deployment path is structurally ready, but production database migration still needs to be decided
 - Northstar self-dogfood identity is now corrected, and the Vercel path is ready for documentation-only readiness work
 
 ## Done
@@ -66,6 +66,8 @@ This is the active build board for the project.
 - Northstar task drawer UX hardened with board trail and clearer decision surface
 - Northstar artifact review UX hardened for founder approval clarity
 - Fallback board state now preserves task movement history
+- Vercel deployment path now targets hosted Postgres with checked-in Prisma migrations
+- Vercel deployment runbook added in `docs/DEPLOY_VERCEL.md`
 
 ## Calibration notes
 

@@ -76,7 +76,7 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
       <section className="panel artifact-panel">
         <p className="eyebrow">Artifact viewer</p>
         <h2>Generated blog brief</h2>
-        <p>Select a brief from the board to review the draft here.</p>
+        <p>Select a brief from the board to review the draft and decide whether it is strong enough to approve.</p>
       </section>
     );
   }
@@ -94,7 +94,7 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
       </div>
       <div className="artifact-hero">
         <div>
-          <span className="eyebrow">Review focus</span>
+          <span className="eyebrow">Founder review</span>
           <h3>{parsed.title}</h3>
         </div>
         <p className="artifact-timestamp">Created {formatDateTime(artifact.createdAt)}</p>

@@ -139,7 +139,7 @@ See [`docs/NORTHSTAR_DOGFOOD.md`](./NORTHSTAR_DOGFOOD.md) for the Northstar-on-N
 Current recommendation:
 - optimize for `early founder pilot with strong demo readiness`
 - validate Northstar first on `Moongate`, `Gridlock`, `Nightwatch QA`, and `Northstar` itself
-- keep the Vercel path structurally ready now, but do not treat local SQLite as production-safe
+- keep the Vercel path Postgres-first and deployable for real demo environments
 
 ## Current calibration findings
 
@@ -190,7 +190,7 @@ The current calibration set has produced a clear controller-level priority order
   1. make the Northstar-on-Northstar demo excellent
   2. harden output quality
   3. improve artifact usefulness
-  4. prepare for Vercel deployment
+  4. prepare for Vercel deployment with hosted Postgres
 
 ## Recommended working mode
 
@@ -201,3 +201,11 @@ The current calibration set has produced a clear controller-level priority order
   - what works
   - what is still stubbed
   - what you should test next
+
+## Deployment status
+
+- Northstar now has a Postgres-first Prisma schema for real deployments.
+- Checked-in Prisma migrations are in `prisma/migrations`.
+- The Vercel build runs migrations, generates Prisma client, and builds both apps.
+- Exact deployment steps are documented in [`docs/DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md).
+- Remaining weakness: the app is deployable for live demos, but artifact execution is still mocked and there is no background job layer yet.

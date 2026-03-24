@@ -37,18 +37,18 @@ export function TaskDrawer({ task, artifact, comments, onClose, onApprove }: Tas
           <section className="decision-card">
             <div>
               <p className="eyebrow">Decision surface</p>
-              <h3>{artifact ? 'Artifact ready for founder review' : 'Task ready for board review'}</h3>
+              <h3>{artifact ? 'Brief ready for founder review' : 'Task ready for founder review'}</h3>
               <p className="summary-copy">
                 {artifact
-                  ? 'This task already produced a draft artifact. Review the brief, check the rationale, and approve only if the language feels founder-usable.'
-                  : 'Use this drawer to understand why the task exists, what outcome it supports, and whether it deserves attention on the board.'}
+                  ? 'This task already produced a draft brief. Review the language, check the rationale, and approve it only if it sounds clear enough to use in a real founder conversation.'
+                  : 'Use this drawer to see why the task exists, why it earned its spot on the board, and what business result it is supposed to move.'}
               </p>
             </div>
             {artifact ? (
               <div className="decision-actions">
                 <span className={`pill subtle ${artifact.status}`}>{humanize(artifact.status)}</span>
                 <button className="primary-button secondary" type="button" onClick={() => onApprove(task.id)}>
-                  Approve brief
+                  Approve draft
                 </button>
               </div>
             ) : null}
@@ -79,11 +79,11 @@ export function TaskDrawer({ task, artifact, comments, onClose, onApprove }: Tas
           </section>
           <section>
             <h3>Why this priority</h3>
-            <p>{rationale.whyPriority || 'Priority was derived from the current score and board context.'}</p>
+            <p>{rationale.whyPriority || 'Priority comes from the current score and where this task sits in the board right now.'}</p>
           </section>
           <section>
             <h3>Business outcome</h3>
-            <p>{rationale.businessOutcome || 'This task should improve an acquisition, conversion, or positioning outcome for the company.'}</p>
+            <p>{rationale.businessOutcome || 'This task should improve a concrete acquisition, conversion, or positioning outcome for the company.'}</p>
           </section>
 
           <section>

@@ -82,7 +82,7 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
     return [
       {
         title: `Make ${companyName}'s board-first value obvious to a non-technical founder in one screen`,
-        description: `Rewrite the opening narrative so a founder understands in seconds that ${companyName} turns website context into a prioritized growth board with approvals, not another AI chat pane.`,
+        description: `Rewrite the opening narrative so a founder immediately understands that ${companyName} turns website context into a visible growth board with priorities, ownership, and approvals instead of another AI chat window.`,
         type: "HOMEPAGE_COPY_SUGGESTION",
         source: "SYSTEM",
         impact: 9,
@@ -90,9 +90,9 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
         confidence: 8,
         goal_fit: 9,
         rationale: buildRationale(
-          `The current repo proves the workflow, but it still makes the founder infer too much about why the board is the actual product.`,
-          `This ranks first because if the first screen does not land the board-first promise, the rest of the backlog reads like implementation detail instead of leverage.`,
-          `A sharper first-screen narrative should improve demo conversion, founder trust, and willingness to explore the generated board.`
+          `The current repo proves the workflow, but it still asks the founder to connect the dots on why the board itself is the product.`,
+          `This ranks first because if the first screen misses the board-first promise, everything else reads like implementation detail instead of real leverage.`,
+          `A sharper first-screen story should make demos land faster, build founder trust sooner, and pull people deeper into the board.`
         )
       },
       {
@@ -112,7 +112,7 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
       },
       {
         title: `Draft a blog brief on why non-technical founders need a board, not another chat thread`,
-        description: `Create a founder-approvable brief that turns Northstar's point of view into repeatable language a founder can use in demos, onboarding, and category positioning.`,
+        description: `Create a founder-approvable brief that turns Northstar's point of view into language a founder can reuse in demos, onboarding, and category framing.`,
         type: "BLOG_BRIEF",
         source: "SYSTEM",
         impact: 8,
@@ -120,9 +120,9 @@ const createSeedTemplates = (projectId: string, ingestion: IngestionResult): Tas
         confidence: 8,
         goal_fit: 9,
         rationale: buildRationale(
-          `Northstar has a clear structural point of view, but it still needs sharper language that founders can repeat without sounding like generic AI tooling.`,
-          `It stays near the top because it validates the approval flow while creating a reusable founder-facing asset for demos, content, and sales conversations.`,
-          `A stronger brief should make Northstar easier to explain, easier to trust, and easier for founders to repeat to other founders.`
+          `Northstar has a real point of view, but it still needs sharper language founders can repeat without sounding like generic AI software.`,
+          `It stays near the top because it proves the approval flow while producing a reusable founder-facing asset for demos, content, and sales conversations.`,
+          `A stronger brief should make Northstar easier to explain, easier to trust, and easier for founders to pass along to other founders.`
         )
       },
       {
