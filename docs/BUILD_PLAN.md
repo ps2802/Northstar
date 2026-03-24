@@ -114,13 +114,27 @@ That assumes we keep scope disciplined and do not add full social publishing, fu
 ### Brand/product inputs
 - final product name confirmation: `Northstar`
 - product positioning sentence
-- 3 to 5 example customer websites you care about most
 - 2 to 3 examples of output quality you consider "great"
+
+### Pilot calibration set
+- `Moongate` - Solana wallet adapter
+  - website: `https://www.moongate.one/`
+- `Gridlock` - F1 betting league
+  - website: `https://joingridlock.com/`
+  - repo: `https://github.com/ps2802/F1-predictive-game`
+- `Nightwatch QA` - agentic QA platform
+  - repo: `https://github.com/ps2802/nightwatch-qa`
+
+These three projects should be the primary calibration set for onboarding quality, ICP inference, task specificity, and board trust before wider coworking-space demos.
 
 ### Delivery inputs
 - preferred deployment target: Vercel, Render, Railway, Fly, or other
 - preferred model/provider for artifact generation once we move beyond mocks
 - whether you want me to optimize first for investor demos or early customer pilots
+
+Current recommendation:
+- optimize for `early founder pilot with strong demo readiness`
+- validate Northstar first on `Moongate`, `Gridlock`, and `Nightwatch QA`
 
 ## Recommended working mode
 

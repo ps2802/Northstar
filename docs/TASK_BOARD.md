@@ -18,7 +18,9 @@ This is the active build board for the project.
 ## Next Up
 
 - Tighten the v1 copy pass so onboarding and board language are consistently founder-facing
-- Improve seeded example quality for 3 representative website types
+- Calibrate onboarding and task generation against `Moongate`
+- Calibrate onboarding and task generation against `Gridlock`
+- Calibrate onboarding and task generation against `Nightwatch QA`
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
 - Add a demo script and QA checklist
@@ -32,6 +34,10 @@ This is the active build board for the project.
 - Final launch ICP is not confirmed yet
 - Real artifact generation provider is not chosen yet
 - Deployment target is not chosen yet
+- Need live validation passes for:
+  - `https://www.moongate.one/`
+  - `https://joingridlock.com/`
+  - `https://github.com/ps2802/nightwatch-qa`
 
 ## Done
 
@@ -45,3 +51,7 @@ This is the active build board for the project.
 - Blog brief generation and approval flow built
 - Milestones 1 to 5 polished and validated
 - Repo pushed to GitHub at `ps2802/Northstar`
+- Initial pilot calibration set identified:
+  - `Moongate`
+  - `Gridlock`
+  - `Nightwatch QA`
