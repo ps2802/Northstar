@@ -1,23 +1,85 @@
-# Founder OS v1
+# Northstar
 
-Founder OS v1 is a Kanban-first operating system for non-technical founders.
-The current demo flow is intentionally tight:
+Northstar is a Kanban-first operating system for non-technical founders.
+
+This is not a chatbot with random actions. The board is the product.
+
+A founder enters a website URL, Northstar analyzes what the company does, generates a prioritized marketing and SEO backlog, and runs work through a visible Kanban with approvals.
+
+## Product thesis
+
+Northstar is built around one idea:
+
+- founders need a system of work, not another stream of disconnected AI output
+
+The command center should help a founder:
+
+1. understand what their company currently communicates
+2. see the highest-leverage growth work in priority order
+3. add their own tasks into the same operating board
+4. understand why each task exists and why it is ranked where it is
+5. approve generated artifacts before anything moves forward
+
+## Current v1
+
+The current v1 demo flow is intentionally tight:
 
 1. enter a website URL
-2. analyze the website
-3. generate a company summary and first backlog
-4. review and move work in the Kanban board
-5. add manual tasks
-6. review a generated blog brief in the approval queue
+2. crawl the homepage plus a few important internal pages
+3. generate:
+   - company summary
+   - guessed ICP
+   - key opportunities
+   - first backlog
+4. review and manage work in the Kanban board
+5. add manual tasks and let the system score them
+6. generate one artifact type in v1: `blog_brief`
+7. approve the artifact from the approval queue
+
+Kanban columns:
+
+- `Inbox`
+- `Evaluating`
+- `Planned`
+- `In Progress`
+- `Waiting for Approval`
+- `Done`
+- `Blocked`
+
+## What works today
+
+- website onboarding
+- lightweight site ingestion
+- company summary generation
+- ICP inference
+- opportunity detection
+- seed task generation
+- priority scoring with `priority_score = (impact * confidence * goal_fit) / effort`
+- Kanban board view
+- manual task creation
+- task rationale showing why the task exists, why it has its current priority, and what business outcome it supports
+- task movement history
+- mocked blog brief generation
+- approval flow
+
+## What is intentionally mocked in v1
+
+- agent execution is mocked
+- only `blog_brief` is executable
+- no publishing integrations
+- no WhatsApp / Telegram adapters yet
+- no auth yet
+- no background queue yet
+- no team collaboration features yet
 
 ## Repo layout
 
-- `apps/web`: React + Vite command center
-- `apps/api`: Fastify API and orchestration
+- `apps/web`: React + Vite founder command center
+- `apps/api`: Fastify API and orchestration layer
 - `packages/types`: shared domain models
 - `packages/site-ingestion`: website ingestion and summary logic
-- `packages/task-engine`: task generation, scoring, and transitions
-- `packages/agent-core`: planner and mocked blog-brief execution
+- `packages/task-engine`: task generation, scoring, and Kanban transitions
+- `packages/agent-core`: planner contracts and mocked blog-brief execution
 - `prisma/schema.prisma`: SQLite schema
 
 ## Local setup
@@ -51,7 +113,7 @@ npm run db:seed
 Because this workspace path contains a space, `.env` currently uses an absolute SQLite path for this machine.
 If you move the repo, update `DATABASE_URL` in `.env` to the new absolute `file:` path for `prisma/dev.db`.
 
-Example format:
+Example:
 
 ```env
 DATABASE_URL="file:/absolute/path/to/your/repo/prisma/dev.db"
@@ -104,6 +166,7 @@ curl -s http://localhost:4000/projects
 ```
 
 Expected:
+
 - one seeded project using `https://linear.app`
 
 ### 3. Inspect seeded dashboard
@@ -114,6 +177,7 @@ curl -s http://localhost:4000/projects/$PROJECT_ID/dashboard
 ```
 
 Expected:
+
 - company summary exists
 - tasks exist
 - one approval item exists
@@ -136,9 +200,10 @@ curl -s -X POST http://localhost:4000/projects/$PROJECT_ID/tasks \
 ```
 
 Expected:
+
 - task is created
 - task receives a score
-- task rationale explains why it exists, why it has its priority, and what outcome it supports
+- task rationale explains why it exists, why it has its priority, and what business outcome it supports
 
 ### 5. Move a task between Kanban states
 
@@ -150,6 +215,7 @@ curl -s -X POST http://localhost:4000/projects/$PROJECT_ID/tasks/$TASK_ID/status
 ```
 
 Expected:
+
 - task status changes
 - movement history is recorded
 
@@ -163,36 +229,31 @@ curl -s -X POST http://localhost:4000/approvals/$APPROVAL_ID/decision \
 ```
 
 Expected:
+
 - approval moves to approved
 - linked artifact becomes approved
 - linked task moves to `DONE`
 
-## What is real in v1
+## Pilot calibration set
 
-- website ingestion with lightweight crawling
-- company summary generation
-- task generation and scoring
-- Kanban board states
-- manual task creation
-- approval flow
-- seeded blog brief artifact
+Northstar is currently being calibrated against:
 
-## What is mocked in v1
+- `Moongate`
+- `Gridlock`
+- `Nightwatch QA`
+- `Northstar` itself
 
-- agent execution is mocked
-- only `blog_brief` is executable
-- no publishing
-- no WhatsApp / Telegram / bot adapters yet
-- no auth yet
-- no background queue yet
+Product principle:
+
+- if Northstar cannot create useful growth work for Northstar itself, the feature is not ready
 
 ## Known weaknesses in v1
 
 - site ingestion is heuristic and can still sound generic on some websites
-- company names derived from titles can still be messy on noisy homepages
+- repo-first understanding depends heavily on README wording
 - generated tasks are more specific than before but still rules-based, not model-planned
+- blog brief generation is useful but still template-based
 - manual task prioritization depends on user-entered scoring inputs
-- approval flow is solid for the demo but only covers a single artifact type
 
 ## TODO markers
 
