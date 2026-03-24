@@ -124,8 +124,12 @@ That assumes we keep scope disciplined and do not add full social publishing, fu
   - repo: `https://github.com/ps2802/F1-predictive-game`
 - `Nightwatch QA` - agentic QA platform
   - repo: `https://github.com/ps2802/nightwatch-qa`
+- Northstar dogfood workspace
+  - repo: `https://github.com/ps2802/Northstar`
 
-These three projects should be the primary calibration set for onboarding quality, ICP inference, task specificity, and board trust before wider coworking-space demos.
+These projects should be the primary calibration set for onboarding quality, ICP inference, task specificity, and board trust before wider coworking-space demos.
+
+See [`docs/NORTHSTAR_DOGFOOD.md`](./NORTHSTAR_DOGFOOD.md) for the Northstar-on-Northstar findings and the smallest fixes to prioritize.
 
 ### Delivery inputs
 - preferred deployment target: Vercel, Render, Railway, Fly, or other
@@ -134,7 +138,47 @@ These three projects should be the primary calibration set for onboarding qualit
 
 Current recommendation:
 - optimize for `early founder pilot with strong demo readiness`
-- validate Northstar first on `Moongate`, `Gridlock`, and `Nightwatch QA`
+- validate Northstar first on `Moongate`, `Gridlock`, `Nightwatch QA`, and `Northstar` itself
+
+## Current calibration findings
+
+The current calibration set has produced a clear controller-level priority order.
+
+### What is working
+
+- `Moongate` now reads as a crypto-native Solana product rather than generic B2B software.
+- `Gridlock` now reads as a consumer F1 prediction product with event-driven growth opportunities.
+- `Nightwatch QA` now reads as a repo-first technical B2B product instead of generic SaaS.
+- Task rationale structure is directionally strong across pilots:
+  - why the task exists
+  - why it has its priority
+  - what outcome it supports
+
+### Current quality gate
+
+- `Northstar` dogfooding is still the hardest and most important calibration test.
+- Northstar now correctly reads Northstar itself as a founder operating system instead of a QA product.
+- That means repo-first identity extraction has been corrected for the current dogfood path, but it still needs ongoing validation as the product evolves.
+- Product principle:
+  - If Northstar cannot create useful growth work for Northstar itself, the feature is not ready.
+
+### Top fixes before live demos
+
+1. Keep the founder-OS thesis prominent in repo-first summaries so it does not drift back toward workflow language.
+2. Keep company summaries grounded in the actual buyer-facing promise before deriving ICP.
+3. Tighten task-template selection so repo-first products do not fall back to generic B2B patterns.
+4. Make social and competitor-style tasks more concrete about business outcome.
+5. Keep tone adaptation strong across:
+   - crypto-native products
+   - technical B2B products
+   - consumer/event-driven products
+
+### Calibration references
+
+- [`docs/audits/NORTHSTAR_SELF_AUDIT.md`](./audits/NORTHSTAR_SELF_AUDIT.md)
+- [`docs/audits/MOONGATE_CALIBRATION.md`](./audits/MOONGATE_CALIBRATION.md)
+- [`docs/audits/GRIDLOCK_CALIBRATION.md`](./audits/GRIDLOCK_CALIBRATION.md)
+- [`docs/audits/NIGHTWATCH_QA_CALIBRATION.md`](./audits/NIGHTWATCH_QA_CALIBRATION.md)
 
 ## Recommended working mode
 

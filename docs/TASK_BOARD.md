@@ -17,10 +17,11 @@ This is the active build board for the project.
 
 ## Next Up
 
+- Fix repo-first identity extraction so `Northstar` does not misclassify itself
+- Ground company summaries in the buyer-facing product promise before deriving ICP
+- Tighten task-template selection for repo-first products
+- Make social and competitor-style tasks more outcome-specific
 - Tighten the v1 copy pass so onboarding and board language are consistently founder-facing
-- Calibrate onboarding and task generation against `Moongate`
-- Calibrate onboarding and task generation against `Gridlock`
-- Calibrate onboarding and task generation against `Nightwatch QA`
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
 - Add a demo script and QA checklist
@@ -34,10 +35,7 @@ This is the active build board for the project.
 - Final launch ICP is not confirmed yet
 - Real artifact generation provider is not chosen yet
 - Deployment target is not chosen yet
-- Need live validation passes for:
-  - `https://www.moongate.one/`
-  - `https://joingridlock.com/`
-  - `https://github.com/ps2802/nightwatch-qa`
+- Northstar self-dogfood identity is now corrected, but live demo validation still needs to stay tight
 
 ## Done
 
@@ -55,3 +53,27 @@ This is the active build board for the project.
   - `Moongate`
   - `Gridlock`
   - `Nightwatch QA`
+- `Northstar` added as an official dogfood workspace
+- Pilot calibration audits completed for:
+  - `Moongate`
+  - `Gridlock`
+  - `Nightwatch QA`
+  - `Northstar`
+- Northstar dogfood findings documented in `docs/NORTHSTAR_DOGFOOD.md`
+- Controller/subagent repo rule added in `AGENTS.md`
+
+## Calibration notes
+
+- `Moongate`
+  - Stronger crypto-native understanding
+  - Still needs a clearer split between trader growth and integration-led messaging
+- `Gridlock`
+  - Stronger consumer/F1 framing
+  - Still needs more explicit activation vs retention outcomes in task wording
+- `Nightwatch QA`
+  - Stronger repo-first technical B2B framing
+  - Still needs less generic social-task wording
+- `Northstar`
+  - Strongest quality gate and current miss
+  - Now correctly reads as a founder operating system
+  - Still needs final demo polish and ongoing validation as the product evolves
