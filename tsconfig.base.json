@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@founder-os/types": ["packages/types/src"],
+      "@founder-os/agent-core": ["packages/agent-core/src"],
+      "@founder-os/site-ingestion": ["packages/site-ingestion/src"],
+      "@founder-os/task-engine": ["packages/task-engine/src"]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@founder-os/api",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@founder-os/agent-core": "0.1.0",
+    "@founder-os/site-ingestion": "0.1.0",
+    "@founder-os/task-engine": "0.1.0",
+    "@founder-os/types": "0.1.0",
+    "@prisma/client": "^6.5.0",
+    "fastify": "^5.2.1",
+    "nanoid": "^5.1.5",
+    "zod": "^3.24.2"
+  }
+}
