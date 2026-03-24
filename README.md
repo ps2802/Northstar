@@ -145,6 +145,27 @@ Default local URLs:
 - Web: `http://localhost:5173`
 - API: `http://localhost:4000`
 
+## Deployment path
+
+Northstar is prepared for a simple Vercel deployment path:
+
+- the Vite web app builds to `apps/web/dist`
+- production web requests call the API at `/api`
+- the Fastify app is shared between local dev and serverless entrypoints
+- the root `vercel.json` points Vercel at the monorepo build
+
+Deployment files in place:
+
+- `vercel.json`
+- `api/[...path].ts`
+- `apps/api/src/app.ts`
+
+Important production note:
+
+- the current database is SQLite for local demo work
+- SQLite is not a safe long-term production database for Vercel serverless
+- a real production launch should switch `DATABASE_URL` to an external persistent database before customer traffic
+
 ## Exact test flow
 
 ### 1. Health check

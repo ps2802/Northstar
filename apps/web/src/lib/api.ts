@@ -1,7 +1,7 @@
 import { demoState } from "./mockData";
 import type { AppState, Approval, Artifact, NewTaskInput, Task, TaskStatus, TaskType } from "./types";
 
-const API_BASE_URL = "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:4000" : "/api");
 const STORAGE_KEY = "founder-os-state";
 // TODO(v2): Route this through adapter-aware transport so WhatsApp, Telegram, and bot channels can reuse the same command center state.
 

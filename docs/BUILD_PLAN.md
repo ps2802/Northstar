@@ -139,6 +139,7 @@ See [`docs/NORTHSTAR_DOGFOOD.md`](./NORTHSTAR_DOGFOOD.md) for the Northstar-on-N
 Current recommendation:
 - optimize for `early founder pilot with strong demo readiness`
 - validate Northstar first on `Moongate`, `Gridlock`, `Nightwatch QA`, and `Northstar` itself
+- keep the Vercel path structurally ready now, but do not treat local SQLite as production-safe
 
 ## Current calibration findings
 

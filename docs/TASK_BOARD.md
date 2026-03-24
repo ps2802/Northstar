@@ -20,7 +20,7 @@ This is the active build board for the project.
 - Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
 - Improve the Northstar task drawer and artifact review flow for demo clarity
 - Push the latest hardening commits to GitHub
-- Add Vercel deployment config and deployment notes
+- Verify the Vercel deployment path and document the remaining production database gap
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
 
@@ -33,8 +33,8 @@ This is the active build board for the project.
 
 - Final launch ICP is not confirmed yet
 - Real artifact generation provider is not chosen yet
-- Deployment target is not chosen yet
-- Northstar self-dogfood identity is now corrected, but live demo validation still needs to stay tight
+- Deployment path is structurally ready, but production database migration still needs to be decided
+- Northstar self-dogfood identity is now corrected, and the Vercel path is ready for documentation-only readiness work
 
 ## Done
 
