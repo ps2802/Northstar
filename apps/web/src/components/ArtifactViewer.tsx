@@ -5,6 +5,71 @@ interface ArtifactViewerProps {
   artifact: Artifact | null;
 }
 
+const parseArtifact = (content: string) => {
+  const lines = content.split('\n');
+  const title = lines.find((line) => line.startsWith('# '))?.replace(/^#\s+/, '') ?? 'Generated artifact';
+  const sections: Array<{ heading: string; lines: string[] }> = [];
+  let current: { heading: string; lines: string[] } | null = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line) {
+      if (current) current.lines.push('');
+      continue;
+    }
+
+    if (line.startsWith('# ')) continue;
+
+    if (line.startsWith('## ')) {
+      if (current) sections.push(current);
+      current = { heading: line.replace(/^##\s+/, ''), lines: [] };
+      continue;
+    }
+
+    if (!current) {
+      current = { heading: 'Notes', lines: [] };
+    }
+    current.lines.push(line);
+  }
+
+  if (current) sections.push(current);
+  return { title, sections };
+};
+
+const renderSectionLines = (lines: string[]) => {
+  const filtered = lines.filter(Boolean);
+  const allBullets = filtered.length > 0 && filtered.every((line) => line.startsWith('- '));
+  const allOrdered = filtered.length > 0 && filtered.every((line) => /^\d+\.\s/.test(line));
+
+  if (allBullets) {
+    return (
+      <ul className="artifact-list">
+        {filtered.map((line) => (
+          <li key={line}>{line.replace(/^-\s+/, '')}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (allOrdered) {
+    return (
+      <ol className="artifact-ordered">
+        {filtered.map((line) => (
+          <li key={line}>{line.replace(/^\d+\.\s+/, '')}</li>
+        ))}
+      </ol>
+    );
+  }
+
+  return (
+    <div className="artifact-section-body">
+      {filtered.map((line, index) => (
+        <p key={`${line}-${index}`}>{line}</p>
+      ))}
+    </div>
+  );
+};
+
 export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
   if (!artifact) {
     return (
@@ -16,6 +81,8 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
     );
   }
 
+  const parsed = parseArtifact(artifact.content);
+
   return (
     <section className="panel artifact-panel">
       <div className="panel-heading">
@@ -25,8 +92,21 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
         </div>
         <span className={`pill subtle ${artifact.status}`}>{artifact.status.replace('_', ' ')}</span>
       </div>
-      <p className="artifact-timestamp">Created {formatDateTime(artifact.createdAt)}</p>
-      <pre className="artifact-content">{artifact.content}</pre>
+      <div className="artifact-hero">
+        <div>
+          <span className="eyebrow">Review focus</span>
+          <h3>{parsed.title}</h3>
+        </div>
+        <p className="artifact-timestamp">Created {formatDateTime(artifact.createdAt)}</p>
+      </div>
+      <div className="artifact-sections">
+        {parsed.sections.map((section) => (
+          <article key={section.heading} className="artifact-section">
+            <h3>{section.heading}</h3>
+            {renderSectionLines(section.lines)}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

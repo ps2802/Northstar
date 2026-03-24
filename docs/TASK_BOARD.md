@@ -18,7 +18,6 @@ This is the active build board for the project.
 ## Next Up
 
 - Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
-- Improve the Northstar task drawer and artifact review flow for demo clarity
 - Push the latest hardening commits to GitHub
 - Verify the Vercel deployment path and document the remaining production database gap
 - Add project reuse on re-onboarding
@@ -26,7 +25,7 @@ This is the active build board for the project.
 
 ## In Progress
 
-- Demo hardening for `Northstar` as the primary live demo
+- Final demo hardening for `Northstar` as the primary live demo
 - Gridlock preparation as the secondary live demo case
 
 ## Blocked
@@ -64,6 +63,9 @@ This is the active build board for the project.
 - Northstar homepage task wording hardened for the demo
 - Northstar blog brief quality hardened for the demo
 - Northstar demo runbook added in `docs/DEMO_RUNBOOK.md`
+- Northstar task drawer UX hardened with board trail and clearer decision surface
+- Northstar artifact review UX hardened for founder approval clarity
+- Fallback board state now preserves task movement history
 
 ## Calibration notes
 

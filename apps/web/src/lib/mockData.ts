@@ -3,9 +3,17 @@ import type { AppState, Task } from './types';
 const now = new Date();
 const minutesAgo = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
 
-const scoreTask = (task: Omit<Task, 'priority_score' | 'created_at' | 'updated_at'>): Task => ({
+const scoreTask = (task: Omit<Task, 'priority_score' | 'created_at' | 'updated_at' | 'movement_history'>): Task => ({
   ...task,
-  priority_score: Number(((task.impact * task.confidence * task.goal_fit) / task.effort).toFixed(2)),
+  priority_score: Number((((task.impact * task.confidence * task.goal_fit) / task.effort).toFixed(2))),
+  movement_history: [
+    {
+      from: null,
+      to: task.status,
+      reason: task.source === 'user' ? 'Founder added this task to the board for evaluation.' : 'Task was created from the current company understanding and backlog generation pass.',
+      at: minutesAgo(60)
+    }
+  ],
   created_at: minutesAgo(60),
   updated_at: minutesAgo(5),
 });

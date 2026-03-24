@@ -52,6 +52,12 @@ interface BackendDashboard {
     rationale: string;
     dependencies: string[];
     owner_type: "AGENT" | "USER" | "SYSTEM";
+    movement_history: Array<{
+      from: BackendTaskStatus | null;
+      to: BackendTaskStatus;
+      reason: string;
+      at: string;
+    }>;
     artifact_id?: string | null;
     created_at: string;
     updated_at: string;
@@ -229,6 +235,12 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       dependencies: task.dependencies,
       owner_type:
         task.owner_type === "AGENT" ? "agent" : task.owner_type === "USER" ? "user" : "human",
+      movement_history: task.movement_history.map((movement) => ({
+        from: movement.from ? backendStatusToUi[movement.from] : null,
+        to: backendStatusToUi[movement.to],
+        reason: movement.reason,
+        at: movement.at
+      })),
       created_at: task.created_at,
       updated_at: task.updated_at
     })),
@@ -301,6 +313,14 @@ const fallbackApi = {
       rationale: "User-added task accepted in fallback mode.",
       dependencies: [],
       owner_type: input.owner_type,
+      movement_history: [
+        {
+          from: null,
+          to: "inbox",
+          reason: "Founder added this task while the command center was running in fallback mode.",
+          at: now
+        }
+      ],
       created_at: now,
       updated_at: now
     };
@@ -313,7 +333,24 @@ const fallbackApi = {
   updateTaskStatus: async (taskId: string, status: TaskStatus) =>
     persistAndReturn({
       ...latestState,
-      tasks: latestState.tasks.map((task) => (task.id === taskId ? { ...task, status, updated_at: new Date().toISOString() } : task))
+      tasks: latestState.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        const movedAt = new Date().toISOString();
+        return {
+          ...task,
+          status,
+          movement_history: [
+            ...task.movement_history,
+            {
+              from: task.status,
+              to: status,
+              reason: `Task moved to ${status.replaceAll("_", " ")} in fallback mode.`,
+              at: movedAt
+            }
+          ],
+          updated_at: movedAt
+        };
+      })
     }),
   approveArtifact: async (taskId: string) =>
     persistAndReturn({
