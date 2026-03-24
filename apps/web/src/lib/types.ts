@@ -20,6 +20,13 @@ export type TaskType =
 export type TaskSource = 'system' | 'user' | 'agent';
 export type OwnerType = 'agent' | 'user' | 'human';
 
+export interface TaskMovement {
+  from: TaskStatus | null;
+  to: TaskStatus;
+  reason: string;
+  at: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -74,6 +81,7 @@ export interface Task {
   rationale: string;
   dependencies: string[];
   owner_type: OwnerType;
+  movement_history: TaskMovement[];
   created_at: string;
   updated_at: string;
 }

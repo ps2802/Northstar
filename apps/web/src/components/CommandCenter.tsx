@@ -71,7 +71,7 @@ export function CommandCenter() {
       <div className="ambient ambient-two" />
       <header className="topbar">
         <div>
-          <p className="eyebrow">Founder OS command center</p>
+          <p className="eyebrow">Northstar command center</p>
           <h1>{state.profile.companyName}</h1>
         </div>
         <nav className="topbar-actions">

@@ -17,27 +17,23 @@ This is the active build board for the project.
 
 ## Next Up
 
-- Tighten the v1 copy pass so onboarding and board language are consistently founder-facing
-- Calibrate onboarding and task generation against `Moongate`
-- Calibrate onboarding and task generation against `Gridlock`
-- Calibrate onboarding and task generation against `Nightwatch QA`
+- Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
+- Push the latest hardening commits to GitHub
+- Verify the hosted Postgres-backed Vercel deployment path end to end
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
-- Add a demo script and QA checklist
 
 ## In Progress
 
-- No active implementation task yet
+- Final demo hardening for `Northstar` as the primary live demo
+- Gridlock preparation as the secondary live demo case
+- Hosted Postgres deployment hardening for Vercel demo environments
 
 ## Blocked
 
 - Final launch ICP is not confirmed yet
 - Real artifact generation provider is not chosen yet
-- Deployment target is not chosen yet
-- Need live validation passes for:
-  - `https://www.moongate.one/`
-  - `https://joingridlock.com/`
-  - `https://github.com/ps2802/nightwatch-qa`
+- Northstar self-dogfood identity is now corrected, and the Vercel path is ready for documentation-only readiness work
 
 ## Done
 
@@ -55,3 +51,36 @@ This is the active build board for the project.
   - `Moongate`
   - `Gridlock`
   - `Nightwatch QA`
+- `Northstar` added as an official dogfood workspace
+- Pilot calibration audits completed for:
+  - `Moongate`
+  - `Gridlock`
+  - `Nightwatch QA`
+  - `Northstar`
+- Northstar dogfood findings documented in `docs/NORTHSTAR_DOGFOOD.md`
+- Controller/subagent repo rule added in `AGENTS.md`
+- Public naming standardized around `Northstar`
+- Northstar homepage task wording hardened for the demo
+- Northstar blog brief quality hardened for the demo
+- Northstar demo runbook added in `docs/DEMO_RUNBOOK.md`
+- Northstar task drawer UX hardened with board trail and clearer decision surface
+- Northstar artifact review UX hardened for founder approval clarity
+- Fallback board state now preserves task movement history
+- Vercel deployment path now targets hosted Postgres with checked-in Prisma migrations
+- Vercel deployment runbook added in `docs/DEPLOY_VERCEL.md`
+
+## Calibration notes
+
+- `Moongate`
+  - Stronger crypto-native understanding
+  - Still needs a clearer split between trader growth and integration-led messaging
+- `Gridlock`
+  - Stronger consumer/F1 framing
+  - Still needs more explicit activation vs retention outcomes in task wording
+- `Nightwatch QA`
+  - Stronger repo-first technical B2B framing
+  - Still needs less generic social-task wording
+- `Northstar`
+  - Strongest quality gate and current miss
+  - Now correctly reads as a founder operating system
+  - Still needs final demo polish and ongoing validation as the product evolves

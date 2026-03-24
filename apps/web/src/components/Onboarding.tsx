@@ -11,7 +11,7 @@ export function Onboarding({ onAnalyze, loading }: OnboardingProps) {
   return (
     <section className="hero-shell">
       <div className="hero-copy">
-        <p className="eyebrow">Founder OS</p>
+        <p className="eyebrow">Northstar</p>
         <h1>The operating system for non-technical founders.</h1>
         <p className="lede">
           Drop in a website URL and the system will build a prioritized marketing and SEO backlog,
@@ -56,7 +56,7 @@ export function Onboarding({ onAnalyze, loading }: OnboardingProps) {
           />
         </label>
         <button className="primary-button" type="submit" disabled={loading}>
-          {loading ? 'Analyzing...' : 'Build my founder OS'}
+          {loading ? 'Analyzing...' : 'Open my Northstar board'}
         </button>
         <p className="hint">No publishing. No complex auth. Just a fast demo-ready command center.</p>
       </form>
