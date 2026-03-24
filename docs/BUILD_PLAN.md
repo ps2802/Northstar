@@ -180,6 +180,17 @@ The current calibration set has produced a clear controller-level priority order
 - [`docs/audits/GRIDLOCK_CALIBRATION.md`](./audits/GRIDLOCK_CALIBRATION.md)
 - [`docs/audits/NIGHTWATCH_QA_CALIBRATION.md`](./audits/NIGHTWATCH_QA_CALIBRATION.md)
 
+## Current execution mode
+
+- Build continuously in bounded chunks unless a real blocker appears.
+- Prioritize demo quality and real usability over feature count.
+- Keep the board as the core product surface.
+- Current priority order:
+  1. make the Northstar-on-Northstar demo excellent
+  2. harden output quality
+  3. improve artifact usefulness
+  4. prepare for Vercel deployment
+
 ## Recommended working mode
 
 - we keep one repo-level Kanban updated in `docs/TASK_BOARD.md`

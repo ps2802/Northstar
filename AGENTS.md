@@ -43,3 +43,10 @@ Every spawned subagent must report:
 - Every task must explain why it has its current priority.
 - Human approval exists before publishing.
 - If Northstar cannot create useful growth work for Northstar itself, the feature is not ready.
+
+
+## Execution Mode
+- Keep moving forward in bounded work chunks without waiting for approval unless a real blocker exists.
+- Only pause for blockers that materially affect product direction, credentials/access, deployment handoff, legal/security risk, destructive actions, or major path divergence.
+- Prefer the simplest path that preserves demo quality and core usability.
+- Keep `AGENTS.md`, `docs/BUILD_PLAN.md`, `docs/TASK_BOARD.md`, and `README.md` aligned with real product progress when public context changes.

@@ -17,18 +17,17 @@ This is the active build board for the project.
 
 ## Next Up
 
-- Fix repo-first identity extraction so `Northstar` does not misclassify itself
-- Ground company summaries in the buyer-facing product promise before deriving ICP
-- Tighten task-template selection for repo-first products
-- Make social and competitor-style tasks more outcome-specific
-- Tighten the v1 copy pass so onboarding and board language are consistently founder-facing
+- Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
+- Improve the Northstar task drawer and artifact review flow for demo clarity
+- Push the latest hardening commits to GitHub
+- Add Vercel deployment config and deployment notes
 - Add project reuse on re-onboarding
 - Add stronger error and empty states in the web app
-- Add a demo script and QA checklist
 
 ## In Progress
 
-- No active implementation task yet
+- Demo hardening for `Northstar` as the primary live demo
+- Gridlock preparation as the secondary live demo case
 
 ## Blocked
 
@@ -61,6 +60,10 @@ This is the active build board for the project.
   - `Northstar`
 - Northstar dogfood findings documented in `docs/NORTHSTAR_DOGFOOD.md`
 - Controller/subagent repo rule added in `AGENTS.md`
+- Public naming standardized around `Northstar`
+- Northstar homepage task wording hardened for the demo
+- Northstar blog brief quality hardened for the demo
+- Northstar demo runbook added in `docs/DEMO_RUNBOOK.md`
 
 ## Calibration notes
 
