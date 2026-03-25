@@ -1,5 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "if [ -n \"$DATABASE_URL\" ] && [ -n \"$DIRECT_URL\" ]; then npx prisma migrate deploy --schema=./prisma/schema.prisma; else echo \"Skipping prisma migrate deploy because DATABASE_URL or DIRECT_URL is not set\"; fi && npx prisma generate --schema=./prisma/schema.prisma && npm run build",
+  "buildCommand": "npm run vercel:build",
   "outputDirectory": "apps/web/dist"
 }
