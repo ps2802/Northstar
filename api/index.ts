@@ -11,9 +11,22 @@ async function getApp() {
   return appPromise;
 }
 
+function normalizeRequestUrl(urlString: string) {
+  const url = new URL(urlString, "https://northstar.local");
+  const rewrittenPath = url.searchParams.get("path");
+
+  if (rewrittenPath) {
+    url.searchParams.delete("path");
+    url.pathname = `/${rewrittenPath}`;
+  } else if (url.pathname.startsWith("/api")) {
+    url.pathname = url.pathname.slice(4) || "/";
+  }
+
+  return `${url.pathname}${url.search}`;
+}
+
 export default async function handler(req: IncomingMessage & { url?: string }, res: ServerResponse) {
   const app = await getApp();
-  const originalUrl = req.url ?? "/";
-  req.url = originalUrl.startsWith("/api") ? originalUrl.slice(4) || "/" : originalUrl;
+  req.url = normalizeRequestUrl(req.url ?? "/api");
   app.server.emit("request", req, res);
 }
