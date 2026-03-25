@@ -13,7 +13,7 @@
     "build": "npm run build --workspaces",
     "db:generate": "prisma generate --schema=./prisma/schema.prisma",
     "db:push": "prisma db push --schema=./prisma/schema.prisma",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",
     "db:migrate:deploy": "prisma migrate deploy --schema=./prisma/schema.prisma"
   },
   "devDependencies": {

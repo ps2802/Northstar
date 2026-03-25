@@ -189,8 +189,8 @@ The current calibration set has produced a clear controller-level priority order
 - Current priority order:
   1. make the Northstar-on-Northstar demo excellent
   2. harden output quality
-  3. improve artifact usefulness
-  4. prepare for Vercel deployment with hosted Postgres
+  3. prepare for Vercel deployment with hosted Postgres
+  4. improve artifact usefulness beyond mocked execution
 
 ## Recommended working mode
 
@@ -207,5 +207,11 @@ The current calibration set has produced a clear controller-level priority order
 - Northstar now has a Postgres-first Prisma schema for real deployments.
 - Checked-in Prisma migrations are in `prisma/migrations`.
 - The Vercel build runs migrations, generates Prisma client, and builds both apps.
+- Supabase-backed local migration and seed now complete successfully against a real hosted Postgres database.
+- PRD v1 workflow validation now covers:
+  - manual task creation with optional description
+  - command-center `blog_brief` execution
+  - approval reject path with revision notes
+  - persisted task comments
 - Exact deployment steps are documented in [`docs/DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md).
 - Remaining weakness: the app is deployable for live demos, but artifact execution is still mocked and there is no background job layer yet.

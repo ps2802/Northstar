@@ -21,11 +21,10 @@ This is the active build board for the project.
 - Push the latest hardening commits to GitHub
 - Verify the hosted Postgres-backed Vercel deployment path end to end
 - Add project reuse on re-onboarding
-- Add stronger error and empty states in the web app
+- Add stronger empty states in the web app
 
 ## In Progress
 
-- Final demo hardening for `Northstar` as the primary live demo
 - Gridlock preparation as the secondary live demo case
 - Hosted Postgres deployment hardening for Vercel demo environments
 
@@ -68,6 +67,18 @@ This is the active build board for the project.
 - Fallback board state now preserves task movement history
 - Vercel deployment path now targets hosted Postgres with checked-in Prisma migrations
 - Vercel deployment runbook added in `docs/DEPLOY_VERCEL.md`
+- PRD v1 workflow gaps closed:
+  - command-center blog brief execution
+  - reject with revision notes
+  - persisted task comments
+  - action-specific error/loading states
+  - optional manual-task descriptions
+- Supabase-backed Prisma migration and seed validated end to end
+- Live API flow validated for:
+  - onboarding
+  - manual task creation
+  - blog brief execution
+  - rejection with comment persistence
 
 ## Calibration notes
 

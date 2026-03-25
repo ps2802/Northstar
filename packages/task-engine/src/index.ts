@@ -503,7 +503,7 @@ export const createTaskFromInput = (projectId: string, input: TaskInput): Task =
     id: nanoid(),
     project_id: projectId,
     title: scored.title,
-    description: scored.description,
+    description: scored.description ?? "",
     type: scored.type,
     source: scored.source,
     status: "INBOX",

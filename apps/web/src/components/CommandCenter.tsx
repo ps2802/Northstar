@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFounderApi } from '../lib/api';
 import { demoState } from '../lib/mockData';
-import type { AppState, Task } from '../lib/types';
+import type { AppState, Approval, Task } from '../lib/types';
 import type { NewTaskInput, TaskStatus } from '../lib/types';
 import { Onboarding } from './Onboarding';
 import { CompanySummary } from './CompanySummary';
@@ -13,11 +13,34 @@ import { ArtifactViewer } from './ArtifactViewer';
 
 const api = createFounderApi();
 
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+
+const clearTaskError = (errors: Record<string, string>, taskId: string) => {
+  if (!(taskId in errors)) {
+    return errors;
+  }
+
+  const next = { ...errors };
+  delete next[taskId];
+  return next;
+};
+
 export function CommandCenter() {
   const [state, setState] = useState<AppState>(demoState);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState<'onboarding' | 'dashboard'>('onboarding');
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
+  const [addTaskLoading, setAddTaskLoading] = useState(false);
+  const [statusChangeTaskId, setStatusChangeTaskId] = useState<string | null>(null);
+  const [executeTaskId, setExecuteTaskId] = useState<string | null>(null);
+  const [approveTaskId, setApproveTaskId] = useState<string | null>(null);
+  const [rejectTaskId, setRejectTaskId] = useState<string | null>(null);
+  const [commentTaskId, setCommentTaskId] = useState<string | null>(null);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [addTaskError, setAddTaskError] = useState<string | null>(null);
+  const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
+  const [decisionErrors, setDecisionErrors] = useState<Record<string, string>>({});
+  const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void api.getState().then((loaded) => setState(loaded));
@@ -27,6 +50,18 @@ export function CommandCenter() {
     () => state.artifacts.find((artifact) => artifact.taskId === selectedTask?.id) ?? null,
     [selectedTask, state.artifacts],
   );
+
+  const selectedApproval = useMemo<Approval | null>(() => {
+    if (!selectedTask) {
+      return null;
+    }
+
+    return (
+      state.approvals.find((approval) => approval.taskId === selectedTask.id && approval.status === 'pending')
+      ?? state.approvals.find((approval) => approval.taskId === selectedTask.id)
+      ?? null
+    );
+  }, [selectedTask, state.approvals]);
 
   const comments = useMemo(
     () => state.comments.filter((comment) => comment.taskId === selectedTask?.id),
@@ -57,11 +92,121 @@ export function CommandCenter() {
     };
   }, [state.tasks]);
 
-  const refreshState = async (nextState: Promise<AppState>) => {
-    const updated = await nextState;
+  const applyState = (updated: AppState) => {
     setState(updated);
-    if (selectedTask) {
-      setSelectedTask(updated.tasks.find((task) => task.id === selectedTask.id) ?? updated.tasks[0] ?? null);
+    setSelectedTask((current) => current ? updated.tasks.find((task) => task.id === current.id) ?? null : null);
+  };
+
+  const handleAnalyze = async (websiteUrl: string) => {
+    setOnboardingError(null);
+    setOnboardingLoading(true);
+
+    try {
+      const updated = await api.analyzeWebsite(websiteUrl);
+      applyState(updated);
+      setPage('dashboard');
+      return true;
+    } catch (error) {
+      setOnboardingError(getErrorMessage(error));
+      return false;
+    } finally {
+      setOnboardingLoading(false);
+    }
+  };
+
+  const handleAddTask = async (input: NewTaskInput) => {
+    setAddTaskError(null);
+    setAddTaskLoading(true);
+
+    try {
+      const updated = await api.addTask(input);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setAddTaskError(getErrorMessage(error));
+      return false;
+    } finally {
+      setAddTaskLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    setStatusErrors((current) => clearTaskError(current, taskId));
+    setStatusChangeTaskId(taskId);
+
+    try {
+      const updated = await api.updateTaskStatus(taskId, status);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setStatusErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setStatusChangeTaskId((current) => current === taskId ? null : current);
+    }
+  };
+
+  const handleExecuteTask = async (taskId: string) => {
+    setDecisionErrors((current) => clearTaskError(current, taskId));
+    setExecuteTaskId(taskId);
+
+    try {
+      const updated = await api.executeTask(taskId);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setExecuteTaskId((current) => current === taskId ? null : current);
+    }
+  };
+
+  const handleApproveArtifact = async (taskId: string) => {
+    setDecisionErrors((current) => clearTaskError(current, taskId));
+    setApproveTaskId(taskId);
+
+    try {
+      const updated = await api.approveArtifact(taskId);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setApproveTaskId((current) => current === taskId ? null : current);
+    }
+  };
+
+  const handleRejectArtifact = async (taskId: string, note?: string) => {
+    setDecisionErrors((current) => clearTaskError(current, taskId));
+    setRejectTaskId(taskId);
+
+    try {
+      const updated = await api.rejectArtifact(taskId, note);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setRejectTaskId((current) => current === taskId ? null : current);
+    }
+  };
+
+  const handleAddComment = async (taskId: string, body: string) => {
+    setCommentErrors((current) => clearTaskError(current, taskId));
+    setCommentTaskId(taskId);
+
+    try {
+      const updated = await api.addComment(taskId, body);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setCommentErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setCommentTaskId((current) => current === taskId ? null : current);
     }
   };
 
@@ -75,20 +220,20 @@ export function CommandCenter() {
           <h1>{state.profile.companyName}</h1>
         </div>
         <nav className="topbar-actions">
-          <button className="ghost-button" type="button" onClick={() => setPage('onboarding')}>Re-run onboarding</button>
-          <button className="primary-button" type="button" onClick={() => setPage('dashboard')}>Open board</button>
+          <button className="ghost-button" type="button" onClick={() => setPage('onboarding')}>
+            Re-run onboarding
+          </button>
+          <button className="primary-button" type="button" onClick={() => setPage('dashboard')}>
+            Open board
+          </button>
         </nav>
       </header>
 
       {page === 'onboarding' ? (
         <Onboarding
-          loading={loading}
-          onAnalyze={async (websiteUrl) => {
-            setLoading(true);
-            await refreshState(api.analyzeWebsite(websiteUrl));
-            setLoading(false);
-            setPage('dashboard');
-          }}
+          error={onboardingError}
+          loading={onboardingLoading}
+          onAnalyze={handleAnalyze}
         />
       ) : (
         <>
@@ -132,28 +277,30 @@ export function CommandCenter() {
               </div>
               <div className="board-frame">
                 <KanbanBoard
+                  pendingTaskId={statusChangeTaskId}
+                  statusErrors={statusErrors}
                   tasks={state.tasks}
                   onTaskOpen={(task) => setSelectedTask(task)}
-                  onStatusChange={async (taskId, status) => {
-                    await refreshState(api.updateTaskStatus(taskId, status));
-                  }}
+                  onStatusChange={handleStatusChange}
                 />
               </div>
             </div>
 
             <aside className="workspace-side">
               <AddTaskForm
-                onAdd={async (input: NewTaskInput) => {
-                  await refreshState(api.addTask(input));
-                }}
+                error={addTaskError}
+                loading={addTaskLoading}
+                onAdd={handleAddTask}
               />
               <ApprovalQueue
                 approvals={state.approvals}
-                tasks={state.tasks}
                 artifacts={state.artifacts}
-                onApprove={async (taskId) => {
-                  await refreshState(api.approveArtifact(taskId));
-                }}
+                decisionErrorByTaskId={decisionErrors}
+                pendingApproveTaskId={approveTaskId}
+                pendingRejectTaskId={rejectTaskId}
+                tasks={state.tasks}
+                onApprove={handleApproveArtifact}
+                onReject={handleRejectArtifact}
               />
               <ArtifactViewer artifact={selectedArtifact} />
             </aside>
@@ -162,13 +309,21 @@ export function CommandCenter() {
       )}
 
       <TaskDrawer
-        task={selectedTask}
+        approval={selectedApproval}
+        approveLoading={approveTaskId === selectedTask?.id}
         artifact={selectedArtifact}
+        commentError={selectedTask ? commentErrors[selectedTask.id] ?? null : null}
+        commentLoading={commentTaskId === selectedTask?.id}
         comments={comments}
+        decisionError={selectedTask ? decisionErrors[selectedTask.id] ?? null : null}
+        executeLoading={executeTaskId === selectedTask?.id}
+        onAddComment={handleAddComment}
+        onApprove={handleApproveArtifact}
         onClose={() => setSelectedTask(null)}
-        onApprove={async (taskId) => {
-          await refreshState(api.approveArtifact(taskId));
-        }}
+        onExecute={handleExecuteTask}
+        onReject={handleRejectArtifact}
+        rejectLoading={rejectTaskId === selectedTask?.id}
+        task={selectedTask}
       />
     </main>
   );

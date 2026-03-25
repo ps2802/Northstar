@@ -13,7 +13,9 @@ const taskTypes: { value: TaskType; label: string }[] = [
 ];
 
 interface AddTaskFormProps {
-  onAdd: (input: NewTaskInput) => void;
+  error?: string | null;
+  loading?: boolean;
+  onAdd: (input: NewTaskInput) => Promise<boolean>;
 }
 
 const defaultInput: NewTaskInput = {
@@ -27,16 +29,21 @@ const defaultInput: NewTaskInput = {
   owner_type: 'agent',
 };
 
-export function AddTaskForm({ onAdd }: AddTaskFormProps) {
+export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
   const [input, setInput] = useState<NewTaskInput>(defaultInput);
 
   return (
     <form
       className="panel add-task-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        onAdd(input);
-        setInput(defaultInput);
+        const added = await onAdd({
+          ...input,
+          description: input.description?.trim() ?? '',
+        });
+        if (added) {
+          setInput(defaultInput);
+        }
       }}
     >
       <div>
@@ -45,16 +52,31 @@ export function AddTaskForm({ onAdd }: AddTaskFormProps) {
       </div>
       <label>
         Title
-        <input value={input.title} onChange={(event) => setInput({ ...input, title: event.target.value })} required />
+        <input
+          disabled={loading}
+          value={input.title}
+          onChange={(event) => setInput({ ...input, title: event.target.value })}
+          required
+        />
       </label>
       <label>
-        Description
-        <textarea value={input.description} onChange={(event) => setInput({ ...input, description: event.target.value })} rows={4} required />
+        Description <span className="field-optional">Optional</span>
+        <textarea
+          disabled={loading}
+          value={input.description ?? ''}
+          onChange={(event) => setInput({ ...input, description: event.target.value })}
+          rows={4}
+          placeholder="Add extra founder context, constraints, or why this matters."
+        />
       </label>
       <div className="form-grid">
         <label>
           Type
-          <select value={input.type} onChange={(event) => setInput({ ...input, type: event.target.value as TaskType })}>
+          <select
+            disabled={loading}
+            value={input.type}
+            onChange={(event) => setInput({ ...input, type: event.target.value as TaskType })}
+          >
             {taskTypes.map((type) => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
@@ -62,7 +84,11 @@ export function AddTaskForm({ onAdd }: AddTaskFormProps) {
         </label>
         <label>
           Owner
-          <select value={input.owner_type} onChange={(event) => setInput({ ...input, owner_type: event.target.value as NewTaskInput['owner_type'] })}>
+          <select
+            disabled={loading}
+            value={input.owner_type}
+            onChange={(event) => setInput({ ...input, owner_type: event.target.value as NewTaskInput['owner_type'] })}
+          >
             <option value="agent">Agent</option>
             <option value="human">Human</option>
             <option value="user">User</option>
@@ -72,22 +98,53 @@ export function AddTaskForm({ onAdd }: AddTaskFormProps) {
       <div className="form-grid three-up">
         <label>
           Impact
-          <input type="number" min={1} max={10} value={input.impact} onChange={(event) => setInput({ ...input, impact: Number(event.target.value) })} />
+          <input
+            disabled={loading}
+            type="number"
+            min={1}
+            max={10}
+            value={input.impact}
+            onChange={(event) => setInput({ ...input, impact: Number(event.target.value) })}
+          />
         </label>
         <label>
           Effort
-          <input type="number" min={1} max={10} value={input.effort} onChange={(event) => setInput({ ...input, effort: Number(event.target.value) })} />
+          <input
+            disabled={loading}
+            type="number"
+            min={1}
+            max={10}
+            value={input.effort}
+            onChange={(event) => setInput({ ...input, effort: Number(event.target.value) })}
+          />
         </label>
         <label>
           Confidence
-          <input type="number" min={1} max={10} value={input.confidence} onChange={(event) => setInput({ ...input, confidence: Number(event.target.value) })} />
+          <input
+            disabled={loading}
+            type="number"
+            min={1}
+            max={10}
+            value={input.confidence}
+            onChange={(event) => setInput({ ...input, confidence: Number(event.target.value) })}
+          />
         </label>
       </div>
       <label>
         Goal fit
-        <input type="number" min={1} max={10} value={input.goal_fit} onChange={(event) => setInput({ ...input, goal_fit: Number(event.target.value) })} />
+        <input
+          disabled={loading}
+          type="number"
+          min={1}
+          max={10}
+          value={input.goal_fit}
+          onChange={(event) => setInput({ ...input, goal_fit: Number(event.target.value) })}
+        />
       </label>
-      <button className="primary-button" type="submit">Add to inbox</button>
+      {error ? <p className="form-error">{error}</p> : null}
+      <button className="primary-button" type="submit" disabled={loading}>
+        {loading ? 'Adding...' : 'Add to inbox'}
+      </button>
     </form>
   );
 }

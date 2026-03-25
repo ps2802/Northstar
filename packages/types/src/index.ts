@@ -163,7 +163,7 @@ export interface IngestionResult {
 
 export interface TaskInput {
   title: string;
-  description: string;
+  description?: string;
   type: TaskType;
   source: TaskSource;
   impact: number;
@@ -183,5 +183,6 @@ export interface FounderDashboard {
   tasks: Task[];
   artifacts: Artifact[];
   approvals: Approval[];
+  comments: Comment[];
   agent_runs: AgentRun[];
 }

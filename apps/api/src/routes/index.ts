@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { createManualTask, decideApproval, getDashboard, listProjects, onboardProject, reprioritizeProjectTasks, runTaskExecution, updateTaskStatus } from "../services/dashboard.js";
+import { createManualTask, createTaskComment, decideApproval, getDashboard, listProjects, onboardProject, reprioritizeProjectTasks, runTaskExecution, updateTaskStatus } from "../services/dashboard.js";
 
 const onboardSchema = z.object({
   website_url: z.string().min(3)
@@ -8,7 +8,7 @@ const onboardSchema = z.object({
 
 const taskSchema = z.object({
   title: z.string().min(3),
-  description: z.string().min(10),
+  description: z.string().trim().optional(),
   type: z.enum(["SEO_AUDIT", "KEYWORD_CLUSTER", "META_REWRITE", "BLOG_BRIEF", "LINKEDIN_POST_SET", "X_POST_SET", "HOMEPAGE_COPY_SUGGESTION", "COMPETITOR_SCAN"]),
   impact: z.number().min(1).max(10),
   effort: z.number().min(1).max(10),
@@ -25,6 +25,11 @@ const approvalSchema = z.object({
 
 const statusSchema = z.object({
   status: z.enum(["INBOX", "EVALUATING", "PLANNED", "IN_PROGRESS", "WAITING_FOR_APPROVAL", "DONE", "BLOCKED"])
+});
+
+const commentSchema = z.object({
+  body: z.string().trim().min(1),
+  author: z.string().trim().min(1).optional()
 });
 
 export const registerRoutes = async (app: FastifyInstance) => {
@@ -58,7 +63,12 @@ export const registerRoutes = async (app: FastifyInstance) => {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
 
-    const task = await createManualTask(projectId, { ...parsed.data, rationale: parsed.data.rationale ?? "", source: "USER" });
+    const task = await createManualTask(projectId, {
+      ...parsed.data,
+      description: parsed.data.description ?? "",
+      rationale: parsed.data.rationale ?? "",
+      source: "USER"
+    });
     return { task };
   });
 
@@ -88,6 +98,20 @@ export const registerRoutes = async (app: FastifyInstance) => {
     }
 
     const dashboard = await updateTaskStatus(projectId, taskId, parsed.data.status);
+    if (!dashboard) {
+      return reply.status(404).send({ error: "Project or task not found" });
+    }
+    return { dashboard };
+  });
+
+  app.post("/projects/:projectId/tasks/:taskId/comments", async (request, reply) => {
+    const { projectId, taskId } = request.params as { projectId: string; taskId: string };
+    const parsed = commentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+
+    const dashboard = await createTaskComment(projectId, taskId, parsed.data.body, parsed.data.author);
     if (!dashboard) {
       return reply.status(404).send({ error: "Project or task not found" });
     }
