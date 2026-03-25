@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { buildApp } from "../apps/api/src/app.js";
+import { buildApp } from "../apps/api/dist/app.js";
 
 const appPromise = buildApp();
 
