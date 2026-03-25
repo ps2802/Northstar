@@ -92,7 +92,7 @@ export interface Artifact {
   type: 'blog_brief';
   title: string;
   content: string;
-  status: 'draft' | 'needs_review' | 'approved';
+  status: 'draft' | 'needs_review' | 'approved' | 'rejected';
   createdAt: string;
 }
 
@@ -137,7 +137,7 @@ export interface AppState {
 
 export interface NewTaskInput {
   title: string;
-  description: string;
+  description?: string;
   type: TaskType;
   impact: number;
   effort: number;

@@ -78,6 +78,14 @@ interface BackendDashboard {
     updated_at: string;
     decision_note?: string | null;
   }>;
+  comments?: Array<{
+    id: string;
+    task_id: string;
+    body: string;
+    author: string;
+    created_at: string;
+    updated_at: string;
+  }>;
   agent_runs: Array<{
     id: string;
     project_id: string;
@@ -167,7 +175,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       artifact.status === "APPROVED"
         ? "approved"
         : artifact.status === "REJECTED"
-          ? "needs_review"
+          ? "rejected"
           : artifact.status === "WAITING_FOR_APPROVAL"
             ? "needs_review"
             : "draft",
@@ -246,7 +254,13 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
     })),
     artifacts,
     approvals,
-    comments: [],
+    comments: (dashboard.comments ?? []).map((comment) => ({
+      id: comment.id,
+      taskId: comment.task_id,
+      author: comment.author,
+      body: comment.body,
+      createdAt: comment.created_at
+    })),
     agentRuns: dashboard.agent_runs.map((run) => ({
       id: run.id,
       projectId: run.project_id,
@@ -259,6 +273,33 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
   };
 };
 
+const getResponseErrorMessage = async (response: Response) => {
+  const fallbackMessage = `Request failed: ${response.status}`;
+
+  try {
+    const payload = await response.json() as { error?: string | { formErrors?: string[]; fieldErrors?: Record<string, string[]> } };
+    if (typeof payload.error === "string") {
+      return payload.error;
+    }
+
+    if (payload.error && typeof payload.error === "object") {
+      const formErrors = payload.error.formErrors ?? [];
+      if (formErrors.length) {
+        return formErrors.join(", ");
+      }
+
+      const fieldErrors = Object.values(payload.error.fieldErrors ?? {}).flat().filter(Boolean);
+      if (fieldErrors.length) {
+        return fieldErrors.join(", ");
+      }
+    }
+  } catch {
+    // Ignore JSON parsing errors and fall through to a generic message.
+  }
+
+  return fallbackMessage;
+};
+
 const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
@@ -268,7 +309,7 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await getResponseErrorMessage(response));
   }
 
   return (await response.json()) as T;
@@ -283,90 +324,18 @@ const persistAndReturn = (state: AppState) => {
 };
 
 const fallbackApi = {
-  getState: async () => persistAndReturn(loadState()),
-  analyzeWebsite: async (websiteUrl: string) => {
-    const next = clone(demoState);
-    next.project.websiteUrl = websiteUrl;
-    next.project.name = new URL(websiteUrl).hostname.replace(/^www\./, "");
-    next.profile.companyName = next.project.name;
-    next.profile.summary = `Demo mode analyzed ${websiteUrl} and seeded a founder-facing board locally because the API is not reachable.`;
-    next.snapshot.pages = next.snapshot.pages.map((page, index) => ({
-      ...page,
-      url: index === 0 ? websiteUrl : `${websiteUrl.replace(/\/$/, "")}/${page.title.toLowerCase()}`
-    }));
-    return persistAndReturn(next);
-  },
-  addTask: async (input: NewTaskInput) => {
-    const now = new Date().toISOString();
-    const task: Task = {
-      id: `task_${Math.random().toString(36).slice(2, 8)}`,
-      title: input.title,
-      description: input.description,
-      type: input.type,
-      source: "user",
-      status: "inbox",
-      impact: input.impact,
-      effort: input.effort,
-      confidence: input.confidence,
-      goal_fit: input.goal_fit,
-      priority_score: Number(((input.impact * input.confidence * input.goal_fit) / input.effort).toFixed(2)),
-      rationale: "User-added task accepted in fallback mode.",
-      dependencies: [],
-      owner_type: input.owner_type,
-      movement_history: [
-        {
-          from: null,
-          to: "inbox",
-          reason: "Founder added this task while the command center was running in fallback mode.",
-          at: now
-        }
-      ],
-      created_at: now,
-      updated_at: now
-    };
-
-    return persistAndReturn({
-      ...latestState,
-      tasks: [task, ...latestState.tasks]
-    });
-  },
-  updateTaskStatus: async (taskId: string, status: TaskStatus) =>
-    persistAndReturn({
-      ...latestState,
-      tasks: latestState.tasks.map((task) => {
-        if (task.id !== taskId) return task;
-        const movedAt = new Date().toISOString();
-        return {
-          ...task,
-          status,
-          movement_history: [
-            ...task.movement_history,
-            {
-              from: task.status,
-              to: status,
-              reason: `Task moved to ${status.replaceAll("_", " ")} in fallback mode.`,
-              at: movedAt
-            }
-          ],
-          updated_at: movedAt
-        };
-      })
-    }),
-  approveArtifact: async (taskId: string) =>
-    persistAndReturn({
-      ...latestState,
-      tasks: latestState.tasks.map((task) => (task.id === taskId ? { ...task, status: "done", updated_at: new Date().toISOString() } : task)),
-      approvals: latestState.approvals.map((approval) => (approval.taskId === taskId ? { ...approval, status: "approved", decidedAt: new Date().toISOString() } : approval)),
-      artifacts: latestState.artifacts.map((artifact) => (artifact.taskId === taskId ? { ...artifact, status: "approved" } : artifact))
-    })
+  getState: async () => persistAndReturn(loadState())
 };
 
-const withBackendFallback = async <T,>(action: () => Promise<T>, fallback: () => Promise<T>) => {
-  try {
-    return await action();
-  } catch {
-    return fallback();
+const createMutationError = (message: string) => new Error(message);
+
+const getPendingApprovalForTask = (taskId: string) => {
+  const approval = latestState.approvals.find((item) => item.taskId === taskId && item.status === "pending");
+  if (!approval) {
+    throw createMutationError("No pending approval was found for this task.");
   }
+
+  return approval;
 };
 
 export interface FounderApi {
@@ -374,80 +343,90 @@ export interface FounderApi {
   analyzeWebsite: (websiteUrl: string) => Promise<AppState>;
   addTask: (input: NewTaskInput) => Promise<AppState>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<AppState>;
+  executeTask: (taskId: string) => Promise<AppState>;
   approveArtifact: (taskId: string) => Promise<AppState>;
+  rejectArtifact: (taskId: string, note?: string) => Promise<AppState>;
+  addComment: (taskId: string, body: string) => Promise<AppState>;
 }
 
 export const createFounderApi = (): FounderApi => ({
-  getState: async () =>
-    withBackendFallback(
-      async () => {
-        const projectResponse = await fetchJson<{ projects: Array<{ id: string }> }>("/projects");
-        if (projectResponse.projects.length === 0) {
-          return persistAndReturn(loadState());
-        }
+  getState: async () => {
+    try {
+      const projectResponse = await fetchJson<{ projects: Array<{ id: string }> }>("/projects");
+      if (projectResponse.projects.length === 0) {
+        return persistAndReturn(loadState());
+      }
 
-        const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${projectResponse.projects[0].id}/dashboard`);
-        return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
-      },
-      fallbackApi.getState
-    ),
-  analyzeWebsite: async (websiteUrl: string) =>
-    withBackendFallback(
-      async () => {
-        const response = await fetchJson<{ dashboard: BackendDashboard }>("/projects/onboard", {
-          method: "POST",
-          body: JSON.stringify({ website_url: websiteUrl })
-        });
-        return persistAndReturn(mapDashboard(response.dashboard));
-      },
-      async () => fallbackApi.analyzeWebsite(websiteUrl)
-    ),
-  addTask: async (input: NewTaskInput) =>
-    withBackendFallback(
-      async () => {
-        await fetchJson<{ task: { id: string } }>(`/projects/${latestState.project.id}/tasks`, {
-          method: "POST",
-          body: JSON.stringify({
-            title: input.title,
-            description: input.description,
-            type: uiTypeToBackend[input.type],
-            impact: input.impact,
-            effort: input.effort,
-            confidence: input.confidence,
-            goal_fit: input.goal_fit,
-            dependencies: []
-          })
-        });
-        const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
-        return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
-      },
-      async () => fallbackApi.addTask(input)
-    ),
-  updateTaskStatus: async (taskId: string, status: TaskStatus) =>
-    withBackendFallback(
-      async () => {
-        const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/status`, {
-          method: "POST",
-          body: JSON.stringify({ status: uiStatusToBackend[status] })
-        });
-        return persistAndReturn(mapDashboard(response.dashboard));
-      },
-      async () => fallbackApi.updateTaskStatus(taskId, status)
-    ),
-  approveArtifact: async (taskId: string) =>
-    withBackendFallback(
-      async () => {
-        const approval = latestState.approvals.find((item) => item.taskId === taskId && item.status === "pending");
-        if (!approval) {
-          return latestState;
-        }
-
-        const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
-          method: "POST",
-          body: JSON.stringify({ decision: "APPROVED" })
-        });
-        return persistAndReturn(mapDashboard(response.dashboard));
-      },
-      async () => fallbackApi.approveArtifact(taskId)
-    )
+      const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${projectResponse.projects[0].id}/dashboard`);
+      return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
+    } catch {
+      return fallbackApi.getState();
+    }
+  },
+  analyzeWebsite: async (websiteUrl: string) => {
+    const response = await fetchJson<{ dashboard: BackendDashboard }>("/projects/onboard", {
+      method: "POST",
+      body: JSON.stringify({ website_url: websiteUrl })
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  },
+  addTask: async (input: NewTaskInput) => {
+    await fetchJson<{ task: { id: string } }>(`/projects/${latestState.project.id}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: input.title,
+        description: input.description ?? "",
+        type: uiTypeToBackend[input.type],
+        impact: input.impact,
+        effort: input.effort,
+        confidence: input.confidence,
+        goal_fit: input.goal_fit,
+        dependencies: []
+      })
+    });
+    const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
+  },
+  updateTaskStatus: async (taskId: string, status: TaskStatus) => {
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status: uiStatusToBackend[status] })
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  },
+  executeTask: async (taskId: string) => {
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/execute`, {
+      method: "POST"
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  },
+  approveArtifact: async (taskId: string) => {
+    const approval = getPendingApprovalForTask(taskId);
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: "APPROVED" })
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  },
+  rejectArtifact: async (taskId: string, note?: string) => {
+    const approval = getPendingApprovalForTask(taskId);
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        decision: "REJECTED",
+        note: note?.trim() ? note.trim() : undefined
+      })
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  },
+  addComment: async (taskId: string, body: string) => {
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({
+        body,
+        author: "founder"
+      })
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
+  }
 });

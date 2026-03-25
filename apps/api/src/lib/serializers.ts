@@ -124,6 +124,7 @@ export const serializeDashboard = (payload: {
   tasks: PrismaTask[];
   artifacts: PrismaArtifact[];
   approvals: PrismaApproval[];
+  comments: PrismaComment[];
   agentRuns: PrismaAgentRun[];
 }): FounderDashboard => ({
   workspace: serializeWorkspace(payload.workspace),
@@ -133,5 +134,6 @@ export const serializeDashboard = (payload: {
   tasks: payload.tasks.map(serializeTask),
   artifacts: payload.artifacts.map(serializeArtifact),
   approvals: payload.approvals.map(serializeApproval),
+  comments: payload.comments.map(serializeComment),
   agent_runs: payload.agentRuns.map(serializeAgentRun)
 });

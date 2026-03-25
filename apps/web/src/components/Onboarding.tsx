@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
 interface OnboardingProps {
-  onAnalyze: (websiteUrl: string) => void;
+  error?: string | null;
+  onAnalyze: (websiteUrl: string) => Promise<boolean>;
   loading?: boolean;
 }
 
-export function Onboarding({ onAnalyze, loading }: OnboardingProps) {
+export function Onboarding({ error, onAnalyze, loading }: OnboardingProps) {
   const [websiteUrl, setWebsiteUrl] = useState('https://acme-studio.com');
 
   return (
@@ -35,9 +36,9 @@ export function Onboarding({ onAnalyze, loading }: OnboardingProps) {
 
       <form
         className="panel onboarding-panel"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onAnalyze(websiteUrl);
+          await onAnalyze(websiteUrl);
         }}
       >
         <div>
@@ -53,8 +54,10 @@ export function Onboarding({ onAnalyze, loading }: OnboardingProps) {
             inputMode="url"
             autoComplete="url"
             required
+            disabled={loading}
           />
         </label>
+        {error ? <p className="form-error">{error}</p> : null}
         <button className="primary-button" type="submit" disabled={loading}>
           {loading ? 'Analyzing...' : 'Open my Northstar board'}
         </button>

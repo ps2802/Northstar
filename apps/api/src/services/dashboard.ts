@@ -8,6 +8,7 @@ import { serializeArtifact, serializeDashboard, serializeTask } from "../lib/ser
 import { createFallbackIngestion } from "./fallback.js";
 
 const executor = new MockFounderExecutor();
+const DEFAULT_COMMENT_AUTHOR = "founder";
 
 const loadDashboardRecord = async (projectId: string) => {
   const project = await prisma.project.findUnique({
@@ -19,6 +20,7 @@ const loadDashboardRecord = async (projectId: string) => {
       tasks: { orderBy: { priorityScore: "desc" } },
       artifacts: { orderBy: { updatedAt: "desc" } },
       approvals: { orderBy: { createdAt: "desc" } },
+      comments: { orderBy: { createdAt: "asc" } },
       agentRuns: { orderBy: { createdAt: "desc" } }
     }
   });
@@ -35,6 +37,7 @@ const loadDashboardRecord = async (projectId: string) => {
     tasks: project.tasks,
     artifacts: project.artifacts,
     approvals: project.approvals,
+    comments: project.comments,
     agentRuns: project.agentRuns
   });
 };
@@ -83,6 +86,18 @@ const upsertTaskRecord = async (projectId: string, task: ReturnType<typeof seria
     }
   });
 };
+
+const createCommentRecord = async (projectId: string, taskId: string, body: string, author = DEFAULT_COMMENT_AUTHOR) => (
+  prisma.comment.create({
+    data: {
+      id: nanoid(),
+      projectId,
+      taskId,
+      body: body.trim(),
+      author: author.trim() || DEFAULT_COMMENT_AUTHOR
+    }
+  })
+);
 
 export const onboardProject = async (websiteUrl: string) => {
   // TODO(v2): Reuse or version project snapshots instead of creating a new workspace for every onboarding run.
@@ -133,15 +148,16 @@ export const onboardProject = async (websiteUrl: string) => {
   const blogBriefTask = seedTasks.find((task) => task.type === "BLOG_BRIEF");
   if (blogBriefTask) {
     const execution = executor.run(blogBriefTask, ingestion.company_summary, ingestion.guessed_icp);
-    if (execution.artifact) {
+    const artifact = execution.artifact?.type === "BLOG_BRIEF" ? execution.artifact : null;
+    if (artifact) {
       await prisma.artifact.create({
         data: {
-          id: execution.artifact.id,
+          id: artifact.id,
           projectId,
-          type: execution.artifact.type,
-          title: execution.artifact.title,
-          content: execution.artifact.content,
-          status: execution.artifact.status
+          type: artifact.type,
+          title: artifact.title,
+          content: artifact.content,
+          status: artifact.status
         }
       });
 
@@ -149,7 +165,7 @@ export const onboardProject = async (websiteUrl: string) => {
         data: {
           id: nanoid(),
           projectId,
-          artifactId: execution.artifact.id,
+          artifactId: artifact.id,
           status: "PENDING",
           requestedBy: "founder-agent"
         }
@@ -184,6 +200,7 @@ export const listProjects = async () => {
 export const createManualTask = async (projectId: string, input: TaskInput) => {
   const task = createTaskFromInput(projectId, {
     ...input,
+    description: input.description ?? "",
     rationale: input.rationale ?? "",
     source: "USER",
     owner_type: input.owner_type ?? "USER"
@@ -205,6 +222,17 @@ export const createManualTask = async (projectId: string, input: TaskInput) => {
   });
 
   return serializeTask((await prisma.task.findUniqueOrThrow({ where: { id: evaluatedTask.id } })));
+};
+
+export const createTaskComment = async (projectId: string, taskId: string, body: string, author = DEFAULT_COMMENT_AUTHOR) => {
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task || task.projectId !== projectId) {
+    return null;
+  }
+
+  await createCommentRecord(projectId, taskId, body, author);
+
+  return loadDashboardRecord(projectId);
 };
 
 export const reprioritizeProjectTasks = async (projectId: string) => {
@@ -269,16 +297,17 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
   }
 
   const execution = executor.run(serializeTask(taskRecord), project.companyProfile.companySummary, project.companyProfile.guessedICP);
+  const artifact = execution.artifact?.type === "BLOG_BRIEF" ? execution.artifact : null;
 
-  if (execution.artifact) {
+  if (artifact) {
     await prisma.artifact.create({
       data: {
-        id: execution.artifact.id,
+        id: artifact.id,
         projectId,
-        type: execution.artifact.type,
-        title: execution.artifact.title,
-        content: execution.artifact.content,
-        status: execution.artifact.status
+        type: artifact.type,
+        title: artifact.title,
+        content: artifact.content,
+        status: artifact.status
       }
     });
 
@@ -286,7 +315,7 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       data: {
         id: nanoid(),
         projectId,
-        artifactId: execution.artifact.id,
+        artifactId: artifact.id,
         status: "PENDING",
         requestedBy: "founder-agent"
       }
@@ -301,8 +330,8 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       taskId,
       runType: "execution",
       status: "completed",
-      summary: execution.artifact ? "Generated blog brief for approval." : "Execution blocked because task type is not supported in v1.",
-      outputJson: execution.artifact ? JSON.stringify(serializeArtifact(await prisma.artifact.findUniqueOrThrow({ where: { id: execution.artifact.id } }))) : null
+      summary: artifact ? "Generated blog brief for approval." : "Execution blocked because task type is not supported in v1.",
+      outputJson: artifact ? JSON.stringify(serializeArtifact(await prisma.artifact.findUniqueOrThrow({ where: { id: artifact.id } }))) : null
     }
   });
 
@@ -310,11 +339,12 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
 };
 
 export const decideApproval = async (approvalId: string, decision: "APPROVED" | "REJECTED", note?: string) => {
+  const normalizedNote = note?.trim();
   const approval = await prisma.approval.update({
     where: { id: approvalId },
     data: {
       status: decision,
-      decisionNote: note,
+      decisionNote: normalizedNote,
       artifact: {
         update: {
           status: decision === "APPROVED" ? "APPROVED" : "REJECTED"
@@ -333,6 +363,10 @@ export const decideApproval = async (approvalId: string, decision: "APPROVED" | 
       ? transitionTask(serializeTask(linkedTask), "DONE", "Founder approved the generated artifact.")
       : transitionTask(serializeTask(linkedTask), "BLOCKED", "Founder rejected the artifact and requested revisions.");
     await upsertTaskRecord(linkedTask.projectId, nextTask);
+
+    if (decision === "REJECTED" && normalizedNote) {
+      await createCommentRecord(linkedTask.projectId, linkedTask.id, normalizedNote);
+    }
   }
 
   await prisma.agentRun.create({
@@ -343,7 +377,7 @@ export const decideApproval = async (approvalId: string, decision: "APPROVED" | 
       runType: "approval_decision",
       status: "completed",
       summary: `Artifact ${decision.toLowerCase()} by the founder.`,
-      outputJson: JSON.stringify({ approval_id: approvalId, decision, note })
+      outputJson: JSON.stringify({ approval_id: approvalId, decision, note: normalizedNote })
     }
   });
 

@@ -45,6 +45,14 @@ button {
   cursor: pointer;
 }
 
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .app-shell {
   position: relative;
   padding: 32px;
@@ -157,6 +165,12 @@ button {
   transform: translateY(-1px);
 }
 
+.primary-button:disabled,
+.ghost-button:disabled,
+.task-actions select:disabled {
+  transform: none;
+}
+
 .hero-shell {
   display: grid;
   grid-template-columns: 1.5fr 0.95fr;
@@ -202,7 +216,8 @@ button {
 .panel,
 .task-card,
 .approval-card,
-.comment-card {
+.comment-card,
+.error-banner {
   background: var(--panel);
   backdrop-filter: blur(18px);
   border: 1px solid var(--line);
@@ -243,6 +258,11 @@ label {
   font-weight: 600;
 }
 
+.field-optional {
+  font-weight: 500;
+  color: var(--muted);
+}
+
 input,
 textarea,
 select {
@@ -263,6 +283,31 @@ select:focus {
 .hint {
   margin: 0;
   font-size: 0.94rem;
+}
+
+.form-error,
+.inline-error {
+  margin: 0;
+  color: #a43d20;
+  line-height: 1.5;
+}
+
+.inline-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.error-banner {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  border-color: rgba(205, 92, 36, 0.28);
+}
+
+.error-banner p {
+  margin: 0;
 }
 
 .metrics-strip {
@@ -504,12 +549,31 @@ select:focus {
   gap: 12px;
 }
 
+.approval-card-expanded {
+  gap: 18px;
+}
+
+.approval-content {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+}
+
 .approval-card p,
 .approval-card span,
 .comment-card span,
 .artifact-timestamp {
   margin: 0;
   font-size: 0.9rem;
+}
+
+.compact-textarea {
+  width: 100%;
+  min-width: 220px;
+}
+
+.approval-note-field {
+  width: 100%;
 }
 
 .add-task-form {
@@ -545,6 +609,11 @@ select:focus {
 .pill.needs_review,
 .pill.pending {
   color: #8a5a1f;
+}
+
+.pill.rejected,
+.pill.blocked {
+  color: #8b2f2a;
 }
 
 .artifact-hero,
@@ -602,6 +671,31 @@ select:focus {
   gap: 12px;
 }
 
+.decision-actions-column,
+.approval-actions-column,
+.comment-composer-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.decision-actions-stack,
+.comment-composer {
+  display: grid;
+  gap: 12px;
+}
+
+.decision-note {
+  margin-bottom: 0;
+}
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .score-formula {
   font-size: 0.92rem;
 }
@@ -618,6 +712,14 @@ select:focus {
 .history-item span {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.inline-heading {
+  margin-bottom: 12px;
+}
+
+.comment-heading {
+  margin-bottom: 12px;
 }
 
 .drawer-backdrop {
@@ -661,6 +763,11 @@ select:focus {
 .comment-card {
   display: grid;
   gap: 8px;
+}
+
+.danger-button {
+  border-color: rgba(139, 47, 42, 0.2);
+  color: #8b2f2a;
 }
 
 @media (max-width: 1280px) {
