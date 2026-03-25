@@ -34,7 +34,8 @@ The current v1 demo flow is intentionally tight:
 4. review and manage work in the Kanban board
 5. add manual tasks and let the system score them
 6. generate one artifact type in v1: `blog_brief`
-7. approve the artifact from the approval queue
+7. approve or reject the artifact from the approval queue
+8. leave founder comments directly on tasks
 
 Kanban columns:
 
@@ -56,11 +57,12 @@ Kanban columns:
 - seed task generation
 - priority scoring with `priority_score = (impact * confidence * goal_fit) / effort`
 - Kanban board view
-- manual task creation
+- manual task creation, including optional descriptions
 - task rationale showing why the task exists, why it has its current priority, and what business outcome it supports
 - task movement history
-- mocked blog brief generation
-- approval flow
+- task comments
+- mocked blog brief generation from the command center
+- approval flow with approve and reject actions plus revision notes
 
 ## What is intentionally mocked in v1
 
@@ -129,6 +131,8 @@ Seed demo data if you want a ready-made workspace:
 ```bash
 npm run db:seed
 ```
+
+The seed command loads `.env` directly, so it uses the same `DATABASE_URL` and `DIRECT_URL` as the rest of local development.
 
 Example `.env`:
 
@@ -242,6 +246,7 @@ Expected:
 - tasks exist
 - one approval item exists
 - one blog brief artifact exists
+- comments are included in the dashboard payload
 
 ### 4. Create a manual task
 
