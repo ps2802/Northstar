@@ -12,24 +12,25 @@ export function Onboarding({ error, onAnalyze, loading }: OnboardingProps) {
   return (
     <section className="hero-shell">
       <div className="hero-copy">
-        <p className="eyebrow">Northstar</p>
-        <h1>The operating system for non-technical founders.</h1>
+        <p className="eyebrow">Northstar // Operator Intelligence</p>
+        <h1>Your competitors are already compounding.</h1>
         <p className="lede">
-          Drop in a website URL and the system will build a prioritized marketing and SEO backlog,
-          then keep the work moving in a Kanban board you can actually run the business from.
+          Every week without a growth system is revenue walking out the door.
+          Drop in your URL — Northstar surfaces exactly where you're bleeding
+          and hands you a ranked execution plan in 30 seconds.
         </p>
         <div className="feature-grid">
           <div>
-            <strong>Website analysis</strong>
-            <span>Crawl the homepage and key internal pages.</span>
+            <strong>Signal extraction</strong>
+            <span>We surface the revenue gaps your gut already suspects but can't quantify.</span>
           </div>
           <div>
-            <strong>Prioritized backlog</strong>
-            <span>See why every task exists and why it ranks where it does.</span>
+            <strong>Zero-ambiguity backlog</strong>
+            <span>Every task scored, justified, and ranked. No more guessing what to do next.</span>
           </div>
           <div>
-            <strong>Approval-first artifacts</strong>
-            <span>Generate a blog brief before anything is published.</span>
+            <strong>Gated execution</strong>
+            <span>Nothing ships without your sign-off. You stay in control. The system does the work.</span>
           </div>
         </div>
       </div>
@@ -42,11 +43,11 @@ export function Onboarding({ error, onAnalyze, loading }: OnboardingProps) {
         }}
       >
         <div>
-          <h2>Start with your website</h2>
-          <p>We will analyze what the company does, then seed the first task board.</p>
+          <h2>See what you're leaving on the table</h2>
+          <p>Paste your URL. We'll show you the gaps costing you the most — and what to do about them.</p>
         </div>
         <label>
-          Website URL
+          Your website URL
           <input
             value={websiteUrl}
             onChange={(event) => setWebsiteUrl(event.target.value)}
@@ -59,9 +60,9 @@ export function Onboarding({ error, onAnalyze, loading }: OnboardingProps) {
         </label>
         {error ? <p className="form-error">{error}</p> : null}
         <button className="primary-button" type="submit" disabled={loading}>
-          {loading ? 'Analyzing...' : 'Open my Northstar board'}
+          {loading ? 'Scanning for gaps...' : 'Reveal my growth gaps →'}
         </button>
-        <p className="hint">No publishing. No complex auth. Just a fast demo-ready command center.</p>
+        <p className="hint">// Most founders surface 4–6 high-leverage wins they'd completely missed.</p>
       </form>
     </section>
   );

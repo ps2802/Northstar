@@ -216,16 +216,12 @@ export function CommandCenter() {
       <div className="ambient ambient-two" />
       <header className="topbar">
         <div>
-          <p className="eyebrow">Northstar command center</p>
+          <p className="eyebrow">Northstar // Intelligence Layer</p>
           <h1>{state.profile.companyName}</h1>
         </div>
         <nav className="topbar-actions">
-          <button className="ghost-button" type="button" onClick={() => setPage('onboarding')}>
-            Re-run onboarding
-          </button>
-          <button className="primary-button" type="button" onClick={() => setPage('dashboard')}>
-            Open board
-          </button>
+          <button className="ghost-button" type="button" onClick={() => setPage('onboarding')}>← Re-scan</button>
+          <button className="primary-button" type="button" onClick={() => setPage('dashboard')}>Execution board →</button>
         </nav>
       </header>
 
@@ -252,28 +248,28 @@ export function CommandCenter() {
             <div className="workspace-main">
               <section className="board-signals">
                 <article className="signal-card">
-                  <p className="eyebrow">Now</p>
+                  <p className="eyebrow">In motion</p>
                   <h3>{boardSignals.now?.title ?? 'No active task yet'}</h3>
-                  <p>{boardSignals.now?.description ?? 'The board is ready for the next high-leverage move.'}</p>
+                  <p>{boardSignals.now?.description ?? 'The board is loaded. Pick the highest-leverage move and execute.'}</p>
                 </article>
                 <article className="signal-card">
-                  <p className="eyebrow">Next up</p>
-                  <h3>{boardSignals.next?.title ?? 'Inbox is clear'}</h3>
-                  <p>{boardSignals.next?.description ?? 'No queued evaluation work right now.'}</p>
+                  <p className="eyebrow">Queued</p>
+                  <h3>{boardSignals.next?.title ?? 'Inbox clear'}</h3>
+                  <p>{boardSignals.next?.description ?? 'Nothing queued. Every hour idle is compounding cost.'}</p>
                 </article>
                 <article className="signal-card">
-                  <p className="eyebrow">Needs founder review</p>
-                  <h3>{boardSignals.approval?.title ?? 'Nothing waiting'}</h3>
-                  <p>{boardSignals.approval?.description ?? 'Approval queue is currently empty.'}</p>
+                  <p className="eyebrow">Blocking your pipeline</p>
+                  <h3>{boardSignals.approval?.title ?? 'Queue empty'}</h3>
+                  <p>{boardSignals.approval?.description ?? 'Nothing waiting on you right now. Keep the system moving.'}</p>
                 </article>
               </section>
 
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">Operating board</p>
-                  <h2>Kanban command center</h2>
+                  <p className="eyebrow">Execution layer</p>
+                  <h2>Operating board</h2>
                 </div>
-                <span className="pill">Priority score = impact x confidence x goal fit / effort</span>
+                <span className="pill">score = impact × confidence × goal_fit / effort</span>
               </div>
               <div className="board-frame">
                 <KanbanBoard

@@ -36,8 +36,8 @@ export function ApprovalQueue({
     <section className="panel approval-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Approval queue</p>
-          <h2>Blog briefs waiting on founder review</h2>
+          <p className="eyebrow">Awaiting your decision</p>
+          <h2>Briefs blocked on you</h2>
         </div>
         <span className="pill">{pendingApprovals.length} pending</span>
       </div>
@@ -52,7 +52,7 @@ export function ApprovalQueue({
             <article key={approval.id} className="approval-card approval-card-expanded">
               <div className="approval-content">
                 <strong>{task?.title ?? approval.taskId}</strong>
-                <p>{approval.note ?? 'Founder review is required before this brief can move forward.'}</p>
+                <p>{approval.note ?? 'Founder review required before this brief moves forward.'}</p>
                 <span>{formatDateTime(approval.requestedAt)}</span>
                 <label className="approval-note-field">
                   Rejection note <span className="field-optional">Optional</span>
@@ -61,7 +61,7 @@ export function ApprovalQueue({
                     rows={3}
                     value={note}
                     onChange={(event) => setRejectNotes((current) => ({ ...current, [approval.taskId]: event.target.value }))}
-                    placeholder="Tell the agent what needs to change before this brief is useful."
+                    placeholder="Tell the agent exactly what needs to change before this brief is useful."
                   />
                 </label>
                 {decisionErrorByTaskId[approval.taskId] ? <p className="inline-error">{decisionErrorByTaskId[approval.taskId]}</p> : null}
@@ -72,11 +72,9 @@ export function ApprovalQueue({
                   className="primary-button secondary"
                   type="button"
                   disabled={isBusy}
-                  onClick={async () => {
-                    await onApprove(approval.taskId);
-                  }}
+                  onClick={async () => { await onApprove(approval.taskId); }}
                 >
-                  {isApproving ? 'Approving...' : 'Approve'}
+                  {isApproving ? 'Approving...' : 'Approve & ship →'}
                 </button>
                 <button
                   className="ghost-button danger-button"
@@ -84,9 +82,7 @@ export function ApprovalQueue({
                   disabled={isBusy}
                   onClick={async () => {
                     const rejected = await onReject(approval.taskId, note);
-                    if (rejected) {
-                      setRejectNotes((current) => ({ ...current, [approval.taskId]: '' }));
-                    }
+                    if (rejected) setRejectNotes((current) => ({ ...current, [approval.taskId]: '' }));
                   }}
                 >
                   {isRejecting ? 'Rejecting...' : 'Reject'}
@@ -94,7 +90,7 @@ export function ApprovalQueue({
               </div>
             </article>
           );
-        }) : <p>No approval items are waiting right now.</p>}
+        }) : <p>Nothing blocked on you. The system is moving.</p>}
       </div>
     </section>
   );

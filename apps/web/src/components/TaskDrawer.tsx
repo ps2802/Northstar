@@ -168,13 +168,13 @@ export function TaskDrawer({
           </div>
 
           <section className="score-card">
-            <div className="drawer-grid muted-grid">
+            <div className="drawer-grid">
               <div><span>Impact</span><strong>{task.impact}</strong></div>
               <div><span>Effort</span><strong>{task.effort}</strong></div>
               <div><span>Confidence</span><strong>{task.confidence}</strong></div>
               <div><span>Goal fit</span><strong>{task.goal_fit}</strong></div>
             </div>
-            <p className="score-formula">Priority score = impact x confidence x goal fit / effort</p>
+            <p className="score-formula">score = impact × confidence × goal_fit / effort</p>
           </section>
 
           <section>
