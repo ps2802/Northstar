@@ -74,9 +74,9 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
   if (!artifact) {
     return (
       <section className="panel artifact-panel">
-        <p className="eyebrow">Artifact viewer</p>
-        <h2>Generated blog brief</h2>
-        <p>Select a brief from the board to review the draft and decide whether it is strong enough to approve.</p>
+        <p className="eyebrow">Brief viewer</p>
+        <h2>No brief selected</h2>
+        <p>Open a task from the board. If the agent produced a draft, it will appear here for your review before anything moves forward.</p>
       </section>
     );
   }

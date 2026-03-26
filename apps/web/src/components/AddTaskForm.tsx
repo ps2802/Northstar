@@ -47,8 +47,8 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
       }}
     >
       <div>
-        <p className="eyebrow">Add task</p>
-        <h2>Queue work the agent should evaluate</h2>
+        <p className="eyebrow">Inject work</p>
+        <h2>Force work into the system</h2>
       </div>
       <label>
         Title
@@ -143,7 +143,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
       </label>
       {error ? <p className="form-error">{error}</p> : null}
       <button className="primary-button" type="submit" disabled={loading}>
-        {loading ? 'Adding...' : 'Add to inbox'}
+        {loading ? 'Adding...' : 'Inject into board →'}
       </button>
     </form>
   );

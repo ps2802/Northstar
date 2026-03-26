@@ -13,7 +13,7 @@ export function CompanySummary({ project, profile, snapshot }: CompanySummaryPro
       <article className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Company summary</p>
+            <p className="eyebrow">Intelligence brief</p>
             <h2>{profile.companyName}</h2>
           </div>
           <span className="pill">{formatDomain(project.websiteUrl)}</span>
@@ -21,18 +21,18 @@ export function CompanySummary({ project, profile, snapshot }: CompanySummaryPro
         <p className="summary-copy">{profile.summary}</p>
         <div className="stat-row">
           <div>
-            <span>Guessed ICP</span>
+            <span>Target buyer</span>
             <strong>{profile.guessedIcp}</strong>
           </div>
           <div>
-            <span>Analyzed</span>
+            <span>Scanned</span>
             <strong>{formatDateTime(snapshot.capturedAt)}</strong>
           </div>
         </div>
       </article>
 
       <article className="panel">
-        <p className="eyebrow">Key pages</p>
+        <p className="eyebrow">Pages scanned</p>
         <ul className="list-stack">
           {snapshot.pages.map((page) => (
             <li key={page.url}>
@@ -44,7 +44,7 @@ export function CompanySummary({ project, profile, snapshot }: CompanySummaryPro
       </article>
 
       <article className="panel">
-        <p className="eyebrow">Detected opportunities</p>
+        <p className="eyebrow">Revenue gaps detected</p>
         <ul className="bullet-list">
           {profile.opportunities.map((item) => (
             <li key={item}>{item}</li>
