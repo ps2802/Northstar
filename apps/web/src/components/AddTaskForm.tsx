@@ -1,21 +1,6 @@
 import { useState } from 'react';
+import { supportedManualTaskTypes } from '../lib/taskConfig';
 import type { NewTaskInput, TaskType } from '../lib/types';
-
-const taskTypes: { value: TaskType; label: string }[] = [
-  { value: 'seo_audit', label: 'SEO audit' },
-  { value: 'keyword_cluster', label: 'Keyword cluster' },
-  { value: 'meta_rewrite', label: 'Meta rewrite' },
-  { value: 'blog_brief', label: 'Blog brief' },
-  { value: 'linkedin_post_set', label: 'LinkedIn post set' },
-  { value: 'x_post_set', label: 'X post set' },
-  { value: 'email_template', label: 'Email template' },
-  { value: 'outreach_sequence', label: 'Outreach sequence' },
-  { value: 'illustration_brief', label: 'Illustration brief' },
-  { value: 'research_summary', label: 'Research summary' },
-  { value: 'user_research_outreach', label: 'User research outreach' },
-  { value: 'homepage_copy_suggestion', label: 'Homepage copy suggestion' },
-  { value: 'competitor_scan', label: 'Competitor scan' },
-];
 
 interface AddTaskFormProps {
   error?: string | null;
@@ -90,7 +75,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
               value={input.type}
               onChange={(event) => setInput({ ...input, type: event.target.value as TaskType })}
             >
-              {taskTypes.map((type) => (
+              {supportedManualTaskTypes.map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>

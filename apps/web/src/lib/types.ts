@@ -250,6 +250,23 @@ export interface Initiative {
   linkedTaskIds: string[];
 }
 
+export type CampaignStatus = 'active' | 'waiting' | 'blocked' | 'planned' | 'done';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  objective: string;
+  channel: string;
+  audience: string;
+  status: CampaignStatus;
+  linkedTaskIds: string[];
+  linkedRunIds: string[];
+  linkedOutputIds: string[];
+  linkedApprovalIds: string[];
+  primaryMetric: string;
+  updated_at: string;
+}
+
 export interface BuildTask {
   id: string;
   title: string;

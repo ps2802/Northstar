@@ -1,26 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFounderApi } from '../lib/api';
-import { formatDateTime, formatDomain } from '../lib/format';
+import { getIntegrationHealth } from '../lib/accountHealth';
+import { formatDateTime } from '../lib/format';
 import { demoState, redesignBuildPlan } from '../lib/mockData';
 import type {
   AppState,
   Approval,
   ExecutionPreference,
   DashboardSection,
-  DashboardSurface,
   FounderIntake,
   OnboardingDraft,
   Task,
 } from '../lib/types';
 import type { NewTaskInput, TaskStatus } from '../lib/types';
 import { AddTaskForm } from './AddTaskForm';
+import { AnalyticsSummaryPanel } from './AnalyticsSummaryPanel';
 import { ApprovalQueue } from './ApprovalQueue';
 import { BuildDashboard } from './BuildDashboard';
-import { CompanySummary } from './CompanySummary';
+import { CampaignsPanel } from './CampaignsPanel';
 import { ConnectionsPanel } from './ConnectionsPanel';
 import { KanbanBoard } from './KanbanBoard';
 import { Onboarding } from './Onboarding';
 import { OverviewPanels } from './OverviewPanels';
+import { SettingsPanel } from './SettingsPanel';
 import { TaskDrawer } from './TaskDrawer';
 import { WorkspaceNav } from './WorkspaceNav';
 
@@ -44,18 +46,11 @@ const defaultFounderIntake: FounderIntake = {
   authMethod: 'google',
 };
 
-const surfaceOptions: Array<{ key: DashboardSurface; label: string }> = [
-  { key: 'kanban', label: 'Kanban' },
-  { key: 'northstar', label: 'Northstar' },
-  { key: 'founder', label: 'Founder' },
-  { key: 'approvals', label: 'Approvals' },
-];
-
 const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; copy: string }> = {
   command_center: {
     eyebrow: 'Dashboard',
-    title: 'Track what is being built and what moves next.',
-    copy: 'Use this view to see the current implementation pass, the live board underneath it, and the founder queue that still needs decisions.',
+    title: 'Build progress stays visible without becoming the home screen.',
+    copy: 'Use Dashboard to track the current implementation pass. Open Board when you want the live operating surface.',
   },
   board: {
     eyebrow: 'Board',
@@ -63,9 +58,9 @@ const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; co
     copy: 'Tasks should scan like a project system first: active work, founder blockers, approvals, and why each move matters.',
   },
   gtm_plan: {
-    eyebrow: 'GTM Plan',
-    title: 'Goals, channel focus, and active initiatives.',
-    copy: 'Northstar should connect planning to execution so the founder can see which strategic bets are actually moving.',
+    eyebrow: 'Analytics',
+    title: 'A light operating summary, not a reporting suite.',
+    copy: 'Use this view to scan campaign movement, review speed, and channel signal without leaving the board-first workflow.',
   },
   seo: {
     eyebrow: 'SEO',
@@ -73,9 +68,9 @@ const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; co
     copy: 'Keyword structure, page opportunity, and execution-ready tasks live here.',
   },
   content: {
-    eyebrow: 'Content',
-    title: 'Approval-ready content output, not vague ideas.',
-    copy: 'Northstar should create briefs, drafts, and content tasks that are tied to goals and reviewable before publishing.',
+    eyebrow: 'Campaigns',
+    title: 'Campaigns group the board into coherent execution arcs.',
+    copy: 'Use Campaigns to see grouped runs, outputs, and approvals without creating a second operating system.',
   },
   social: {
     eyebrow: 'Social',
@@ -114,18 +109,9 @@ const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; co
   },
   settings: {
     eyebrow: 'Settings',
-    title: 'Workspace context shapes the whole operating system.',
-    copy: 'Business description, ICP, goals, channel priorities, and connection preferences should stay accessible and editable.',
+    title: 'Workspace defaults and account state in one calm place.',
+    copy: 'Keep founder context, connected accounts, and execution defaults visible without turning settings into a second product.',
   },
-};
-
-const launchProfile = {
-  positioning: 'Northstar is the operating system for non-technical founders to plan, generate, approve, and run marketing, campaigns, and early-user acquisition from one board.',
-  icp: 'Non-technical founders and early-stage projects running marketing, campaigns, and early-user acquisition without a full growth team.',
-  collaborationScope: 'Single-founder-first in v1, with lightweight shared access and comments later.',
-  outputQualityBar: 'Productive: specific, editable, channel-aware, and ready to review or use immediately.',
-  supportedProviders: ['OpenAI', 'Anthropic', 'Kimi', 'MiniMax', 'Northstar CLI'],
-  integrationTargets: ['Google Workspace', 'Intercom', 'X', 'Instagram', 'Threads', 'Image generation'],
 };
 
 const executionBlueprints: Partial<Record<DashboardSection, Array<{ title: string; points: string[] }>>> = {
@@ -287,33 +273,17 @@ const defaultExecutionPreferenceForTask = (task: Task, activeProviderId: string)
   };
 };
 
-const filterTasksBySurface = (tasks: Task[], surface: DashboardSurface) => {
-  if (surface === 'northstar') {
-    return tasks.filter((task) => task.actor === 'northstar');
-  }
-
-  if (surface === 'founder') {
-    return tasks.filter((task) => task.needsFounderAction || task.actor === 'founder');
-  }
-
-  if (surface === 'approvals') {
-    return tasks.filter((task) => task.status === 'waiting_for_approval');
-  }
-
-  return tasks;
-};
-
 export function CommandCenter() {
   const savedOnboardingDraft = loadStoredJson<OnboardingDraft>(ONBOARDING_DRAFT_KEY);
   const savedFounderContext = loadStoredJson<FounderIntake>(FOUNDER_CONTEXT_KEY);
   const savedView = loadStoredJson<{
     page: 'onboarding' | 'dashboard';
     activeSection: DashboardSection;
-    activeSurface: DashboardSurface;
   }>(WORKSPACE_VIEW_KEY);
   const savedExecutionPreferences = loadStoredJson<Record<string, ExecutionPreference>>(EXECUTION_PREFS_KEY) ?? {};
   const savedProjectId = loadStoredJson<string>(SELECTED_PROJECT_KEY);
   const hasSavedView = Boolean(savedView);
+  const initialSection = savedView?.activeSection === 'command_center' ? 'board' : savedView?.activeSection ?? 'board';
   const [state, setState] = useState<AppState>(demoState);
   const [availableProjects, setAvailableProjects] = useState<Array<{ id: string; name: string; websiteUrl: string }>>([
     { id: demoState.project.id, name: demoState.project.name, websiteUrl: demoState.project.websiteUrl },
@@ -321,13 +291,15 @@ export function CommandCenter() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(savedProjectId ?? null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [page, setPage] = useState<'onboarding' | 'dashboard'>(savedView?.page ?? 'onboarding');
-  const [activeSection, setActiveSection] = useState<DashboardSection>(savedView?.activeSection ?? 'board');
-  const [activeSurface, setActiveSurface] = useState<DashboardSurface>(savedView?.activeSurface ?? 'kanban');
+  const [activeSection, setActiveSection] = useState<DashboardSection>(initialSection);
   const [founderIntake, setFounderIntake] = useState<FounderIntake | null>(savedFounderContext ?? savedOnboardingDraft?.intake ?? defaultFounderIntake);
   const [onboardingDraft, setOnboardingDraft] = useState<OnboardingDraft | null>(savedOnboardingDraft);
   const [onboardingResetKey, setOnboardingResetKey] = useState(0);
   const [executionPreferences, setExecutionPreferences] = useState<Record<string, ExecutionPreference>>(savedExecutionPreferences);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapNotice, setBootstrapNotice] = useState<string | null>(null);
+  const [bootstrapRetryKey, setBootstrapRetryKey] = useState(0);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [addTaskLoading, setAddTaskLoading] = useState(false);
   const [statusChangeTaskId, setStatusChangeTaskId] = useState<string | null>(null);
@@ -348,43 +320,101 @@ export function CommandCenter() {
   const [providerErrors, setProviderErrors] = useState<Record<string, string>>({});
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, string>>({});
   const [boardQuery, setBoardQuery] = useState('');
-  const [boardCategoryFilter, setBoardCategoryFilter] = useState<'all' | Task['category']>('all');
-  const [boardOwnerFilter, setBoardOwnerFilter] = useState<'all' | 'northstar' | 'founder'>('all');
   const boardSearchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    void Promise.all([
-      api.listProjects(),
-      api.getState(savedProjectId ?? undefined),
-    ]).then(([projects, loaded]) => {
-      const hasProjects = projects.length > 0;
-      setAvailableProjects(projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        websiteUrl: project.websiteUrl,
-      })));
-      setSelectedProjectId(loaded.project.id);
-      setState(loaded);
-      if (loaded.founderIntake) {
-        setFounderIntake(loaded.founderIntake);
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      setIsBootstrapping(true);
+      setBootstrapError(null);
+      setBootstrapNotice(null);
+
+      try {
+        const projects = await api.listProjects();
+        if (cancelled) {
+          return;
+        }
+
+        if (!projects.length) {
+          setAvailableProjects([]);
+          setSelectedProjectId(null);
+          if (!hasSavedView) {
+            setPage('onboarding');
+            setActiveSection('command_center');
+          }
+          return;
+        }
+
+        const available = projects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          websiteUrl: project.websiteUrl,
+        }));
+        const selectedId = savedProjectId && projects.some((project) => project.id === savedProjectId)
+          ? savedProjectId
+          : projects[0].id;
+        const loaded = await api.getState(selectedId);
+        if (cancelled) {
+          return;
+        }
+
+        setAvailableProjects(available);
+        setSelectedProjectId(loaded.project.id);
+        setState(loaded);
+        if (loaded.founderIntake) {
+          setFounderIntake(loaded.founderIntake);
+        }
+        if (!hasSavedView) {
+          setPage('dashboard');
+          setActiveSection('board');
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const cachedProjects = api.listCachedProjects();
+        const cachedState = api.getCachedState();
+        if (cachedState && cachedProjects.length) {
+          setAvailableProjects(cachedProjects.map((project) => ({
+            id: project.id,
+            name: project.name,
+            websiteUrl: project.websiteUrl,
+          })));
+          setSelectedProjectId(cachedState.project.id);
+          setState(cachedState);
+          setPage('dashboard');
+          setActiveSection(savedView?.activeSection === 'command_center' ? 'board' : savedView?.activeSection ?? 'board');
+          if (cachedState.founderIntake) {
+            setFounderIntake(cachedState.founderIntake);
+          }
+          setBootstrapNotice('Live workspace data could not be loaded. Showing cached state until the API is reachable again.');
+        } else {
+          setAvailableProjects([]);
+          setSelectedProjectId(null);
+          setBootstrapError(getErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false);
+        }
       }
-      if (!hasSavedView) {
-        setPage(hasProjects ? 'dashboard' : 'onboarding');
-        setActiveSection(hasProjects ? 'board' : 'command_center');
-        setActiveSurface('kanban');
-      }
-    }).finally(() => {
-      setIsBootstrapping(false);
-    });
-  }, [savedProjectId]);
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapRetryKey, hasSavedView, savedProjectId, savedView?.activeSection]);
 
   useEffect(() => {
     persistStoredJson(WORKSPACE_VIEW_KEY, {
       page,
       activeSection,
-      activeSurface,
     });
-  }, [activeSection, activeSurface, page]);
+  }, [activeSection, page]);
 
   useEffect(() => {
     if (founderIntake) {
@@ -433,7 +463,6 @@ export function CommandCenter() {
       if (event.shiftKey && event.key.toLowerCase() === 'a') {
         event.preventDefault();
         setActiveSection('approvals');
-        setActiveSurface('approvals');
         return;
       }
 
@@ -474,80 +503,40 @@ export function CommandCenter() {
     [selectedTask, state.comments],
   );
 
-  const taskCountByColumn = useMemo(() => {
-    return state.tasks.reduce<Record<TaskStatus, number>>((acc, task) => {
-      acc[task.status] = (acc[task.status] ?? 0) + 1;
-      return acc;
-    }, {
-      inbox: 0,
-      evaluating: 0,
-      planned: 0,
-      in_progress: 0,
-      waiting_for_approval: 0,
-      waiting_on_founder: 0,
-      done: 0,
-      blocked: 0,
-    });
-  }, [state.tasks]);
-
-  const boardSignals = useMemo(() => ({
-    now: sortedTasks.find((task) => task.status === 'in_progress') ?? sortedTasks.find((task) => task.status === 'planned') ?? null,
-    next: sortedTasks.find((task) => task.status === 'evaluating' || task.status === 'inbox') ?? null,
-    founder: sortedTasks.find((task) => task.status === 'waiting_on_founder' || task.status === 'waiting_for_approval') ?? null,
-  }), [sortedTasks]);
-
   const pendingApprovals = useMemo(
     () => state.approvals.filter((approval) => approval.status === 'pending'),
     [state.approvals],
   );
   const hasExistingWorkspace = availableProjects.length > 0 && selectedProjectId !== null;
 
-  const latestRun = useMemo(
-    () => [...state.agentRuns].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))[0] ?? null,
-    [state.agentRuns],
-  );
-
-  const filteredBoardTasks = useMemo(
-    () => filterTasksBySurface(state.tasks, activeSurface),
-    [activeSurface, state.tasks],
-  );
-
   const boardVisibleTasks = useMemo(() => {
     const query = boardQuery.trim().toLowerCase();
-    return filteredBoardTasks.filter((task) => {
-      if (boardCategoryFilter !== 'all' && task.category !== boardCategoryFilter) {
-        return false;
-      }
-
-      if (boardOwnerFilter !== 'all' && task.actor !== boardOwnerFilter) {
-        return false;
-      }
-
+    return state.tasks.filter((task) => {
       if (!query) {
         return true;
       }
 
       return `${task.title} ${task.description} ${task.rationale} ${task.outputLabel ?? ''}`.toLowerCase().includes(query);
     });
-  }, [boardCategoryFilter, boardOwnerFilter, boardQuery, filteredBoardTasks]);
-
-  const northstarTasks = useMemo(
-    () => sortedTasks.filter((task) => task.actor === 'northstar' && !task.needsFounderAction),
-    [sortedTasks],
-  );
+  }, [boardQuery, state.tasks]);
 
   const founderTasks = useMemo(
     () => sortedTasks.filter((task) => task.needsFounderAction || task.actor === 'founder'),
     [sortedTasks],
   );
 
-  const connectedIntegrations = useMemo(
-    () => state.integrations.filter((integration) => integration.status === 'connected').length,
+  const accountSummary = useMemo(
+    () => state.integrations.reduce((summary, integration) => {
+      const stateKey = getIntegrationHealth(integration);
+      summary[stateKey] += 1;
+      return summary;
+    }, {
+      connected: 0,
+      needs_reconnect: 0,
+      not_connected: 0,
+    }),
     [state.integrations],
   );
-
-  const queuedCount = taskCountByColumn.inbox + taskCountByColumn.evaluating + taskCountByColumn.planned;
-  const liveCount = taskCountByColumn.in_progress + taskCountByColumn.waiting_for_approval + taskCountByColumn.waiting_on_founder;
   const sectionTasks = boardVisibleTasks.filter((task) => {
     switch (activeSection) {
       case 'seo':
@@ -573,65 +562,13 @@ export function CommandCenter() {
     }
   });
 
-  const boardEmptyState = useMemo(() => {
-    if (boardQuery || boardCategoryFilter !== 'all' || boardOwnerFilter !== 'all') {
-      return {
-        title: 'No tasks match the current board filters.',
-        copy: 'Adjust the search, owner, or category filters to widen the board again.',
-        actionLabel: 'Reset filters',
-        onAction: () => {
-          setBoardQuery('');
-          setBoardCategoryFilter('all');
-          setBoardOwnerFilter('all');
-        },
-      };
-    }
-
-    if (activeSurface === 'northstar') {
-      return {
-        title: 'No Northstar-owned tasks match this view.',
-        copy: 'Switch back to the full board or queue agent-owned work from the command center so Northstar has a clear execution stack.',
-        actionLabel: 'Show all tasks',
-        onAction: () => setActiveSurface('kanban'),
-      };
-    }
-
-    if (activeSurface === 'founder') {
-      return {
-        title: 'No founder tasks are visible right now.',
-        copy: 'That usually means the founder queue is clear. Switch surfaces or open approvals if you want to review draft decisions.',
-        actionLabel: 'Open approvals',
-        onAction: () => {
-          setActiveSurface('approvals');
-          setActiveSection('approvals');
-        },
-      };
-    }
-
-    if (activeSurface === 'approvals') {
-      return {
-        title: 'Nothing is waiting for approval.',
-        copy: 'Generate a draft, request a revision, or return to the full board to keep Northstar moving.',
-        actionLabel: 'Show all tasks',
-        onAction: () => setActiveSurface('kanban'),
-      };
-    }
-
-    return {
-      title: 'No board work is visible yet.',
-      copy: 'Use the task intake form or finish onboarding so Northstar has something to score and route.',
-      actionLabel: 'Open command center',
-      onAction: () => setActiveSection('command_center'),
-    };
-  }, [activeSection, activeSurface, boardCategoryFilter, boardOwnerFilter, boardQuery]);
-
   const getSectionEmptyState = (section: DashboardSection) => {
-    if (activeSurface !== 'kanban') {
+    if (boardQuery) {
       return {
-        title: `No ${surfaceOptions.find((option) => option.key === activeSurface)?.label.toLowerCase()} tasks match this section.`,
-        copy: 'Surface filters stay active across the workspace. Reset the board view if you want the full section backlog again.',
-        actionLabel: 'Show all tasks',
-        onAction: () => setActiveSurface('kanban'),
+        title: 'No tasks match the current search in this section.',
+        copy: 'Clear the search to bring the full section backlog back.',
+        actionLabel: 'Clear search',
+        onAction: () => setBoardQuery(''),
       };
     }
 
@@ -715,7 +652,6 @@ export function CommandCenter() {
         return next;
       });
       setActiveSection('board');
-      setActiveSurface('kanban');
       setPage('dashboard');
       clearOnboardingDraft();
       return true;
@@ -949,92 +885,6 @@ export function CommandCenter() {
     </section>
   );
 
-  const renderBoardPanel = (title: string, copy: string, tasks: Task[]) => (
-    <section className="board-canvas">
-      <div className="board-canvas-head">
-        <div>
-          <p className="eyebrow">{title}</p>
-          <h3>{copy}</h3>
-          <p className="board-canvas-copy">
-            Priority score = impact x confidence x goal fit / effort.
-          </p>
-        </div>
-        <div className="board-canvas-meta">
-          <span className="formula-chip">{state.profile.companyName}</span>
-          <span className="formula-chip subtle-chip">{boardSignals.now?.title ?? 'Clear runway'}</span>
-        </div>
-      </div>
-
-      <div className="board-filter-bar">
-        <label className="board-filter-field board-filter-search">
-          <span>Search</span>
-          <input
-            ref={boardSearchRef}
-            value={boardQuery}
-            onChange={(event) => setBoardQuery(event.target.value)}
-            placeholder="Search tasks, rationale, or output"
-          />
-        </label>
-
-        <label className="board-filter-field">
-          <span>Category</span>
-          <select value={boardCategoryFilter} onChange={(event) => setBoardCategoryFilter(event.target.value as typeof boardCategoryFilter)}>
-            <option value="all">All categories</option>
-            <option value="gtm">GTM</option>
-            <option value="seo">SEO</option>
-            <option value="content">Content</option>
-            <option value="social">Social</option>
-            <option value="website">Website</option>
-            <option value="crm">CRM</option>
-            <option value="research">Research</option>
-            <option value="product_signal">Feature suggestions</option>
-            <option value="integration">Integrations</option>
-          </select>
-        </label>
-
-        <label className="board-filter-field">
-          <span>Owner</span>
-          <select value={boardOwnerFilter} onChange={(event) => setBoardOwnerFilter(event.target.value as typeof boardOwnerFilter)}>
-            <option value="all">All owners</option>
-            <option value="northstar">Northstar</option>
-            <option value="founder">Founder</option>
-          </select>
-        </label>
-
-        <button
-          className="ghost-button"
-          type="button"
-          onClick={() => {
-            setBoardQuery('');
-            setBoardCategoryFilter('all');
-            setBoardOwnerFilter('all');
-          }}
-        >
-          Reset filters
-        </button>
-      </div>
-
-      {tasks.length ? (
-        <KanbanBoard
-          pendingTaskId={statusChangeTaskId}
-          statusErrors={statusErrors}
-          tasks={tasks}
-          onTaskOpen={(task) => setSelectedTask(task)}
-          onStatusChange={handleStatusChange}
-        />
-      ) : (
-        <article className="board-empty-state">
-          <p className="eyebrow">Filtered view</p>
-          <h3>{boardEmptyState.title}</h3>
-          <p className="board-canvas-copy">{boardEmptyState.copy}</p>
-          <button className="ghost-button" type="button" onClick={boardEmptyState.onAction}>
-            {boardEmptyState.actionLabel}
-          </button>
-        </article>
-      )}
-    </section>
-  );
-
   const renderCapabilityPanels = (section: DashboardSection) => {
     const items = executionBlueprints[section];
     if (!items?.length) {
@@ -1060,78 +910,33 @@ export function CommandCenter() {
   const renderSectionContent = () => {
     if (activeSection === 'command_center') {
       return (
-        <div className="workspace-page">
+        <div className="section-stack">
           <BuildDashboard phases={redesignBuildPlan} />
           <OverviewPanels approvals={state.approvals} founderIntake={founderIntake} tasks={sortedTasks} />
-
-          <div className="dashboard-shell">
-            <div className="board-stage">
-              {renderBoardPanel('Live board', 'Board-first execution across Northstar and founder lanes', boardVisibleTasks)}
-            </div>
-
-            <aside className="insight-rail">
-              <ApprovalQueue
-                approvals={state.approvals}
-                artifacts={state.artifacts}
-                decisionErrorByTaskId={decisionErrors}
-                pendingExecuteTaskId={executeTaskId}
-                pendingApproveTaskId={approveTaskId}
-                pendingRejectTaskId={rejectTaskId}
-                tasks={state.tasks}
-                onApprove={handleApproveArtifact}
-                onRequestRevision={handleExecuteTask}
-                onReject={handleRejectArtifact}
-                onTaskOpen={(task) => setSelectedTask(task)}
-              />
-              <ConnectionsPanel
-                connectErrorById={integrationErrors}
-                founderSession={state.founderSession}
-                founderIntake={founderIntake}
-                providerErrorById={providerErrors}
-                executionProviders={state.executionProviders}
-                activeProviderId={state.activeProviderId}
-                integrations={state.integrations}
-                pendingProviderConnectId={connectProviderId}
-                pendingProviderActivateId={activateProviderId}
-                pendingConnectId={connectIntegrationId}
-                pendingDisconnectId={disconnectIntegrationId}
-                pendingSyncId={syncIntegrationId}
-                onProviderConnect={handleConnectProvider}
-                onProviderActivate={handleActivateProvider}
-                onConnect={handleConnectIntegration}
-                onDisconnect={handleDisconnectIntegration}
-                onSync={handleSyncIntegration}
-              />
-              <CompanySummary project={state.project} profile={state.profile} snapshot={state.snapshot} />
-              <AddTaskForm error={addTaskError} loading={addTaskLoading} onAdd={handleAddTask} />
-            </aside>
-          </div>
         </div>
       );
     }
 
     if (activeSection === 'board') {
       return (
-        <div className="dashboard-shell">
-          <div className="board-stage">
-            {renderBoardPanel('Project board', 'A Linear-style board for founder operations', boardVisibleTasks)}
-          </div>
-
-          <aside className="insight-rail">
-            {renderTaskList('Northstar is doing', 'The next agent-owned execution stack', northstarTasks.slice(0, 4), {
-              title: 'No agent-owned work is queued.',
-              copy: 'Add a task or switch to the full board if you want Northstar to pick up another execution block.',
-              actionLabel: 'Open command center',
-              onAction: () => setActiveSection('command_center'),
-            })}
-            {renderTaskList('Founder needs to do', 'The next human decisions and blockers', founderTasks.slice(0, 4), {
-              title: 'The founder queue is clear.',
-              copy: 'No blocker or decision is active right now, so Northstar has runway to continue the next pass.',
-              actionLabel: 'Open approvals',
-              onAction: () => setActiveSection('approvals'),
-            })}
+        <div className="section-stack">
+          <KanbanBoard
+            approvals={state.approvals}
+            pendingTaskId={statusChangeTaskId}
+            statusErrors={statusErrors}
+            tasks={boardVisibleTasks}
+            onTaskOpen={(task) => setSelectedTask(task)}
+            onStatusChange={handleStatusChange}
+          />
+          <section className="rail-card section-card">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Add task</p>
+                <h2>Queue a new task for the board</h2>
+              </div>
+            </div>
             <AddTaskForm error={addTaskError} loading={addTaskLoading} onAdd={handleAddTask} />
-          </aside>
+          </section>
         </div>
       );
     }
@@ -1142,51 +947,20 @@ export function CommandCenter() {
           <section className="rail-card section-card">
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Goals</p>
-                <h2>Current growth plan</h2>
+                <p className="eyebrow">Analytics</p>
+                <h2>Operating summary</h2>
               </div>
             </div>
-            <div className="goal-grid">
-              {state.goals.map((goal) => (
-                <article key={goal.id} className="goal-card">
-                  <span>{goal.horizon}</span>
-                  <strong>{goal.title}</strong>
-                  <p>{goal.summary}</p>
-                  <div className="goal-meta">
-                    <span>{goal.metric}</span>
-                    <span>{goal.target}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <AnalyticsSummaryPanel
+              agentRuns={state.agentRuns}
+              approvals={state.approvals}
+              artifacts={state.artifacts}
+              founderIntake={founderIntake}
+              goals={state.goals}
+              initiatives={state.initiatives}
+              tasks={state.tasks}
+            />
           </section>
-
-          <section className="rail-card section-card">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Initiatives</p>
-                <h2>What Northstar is sequencing now</h2>
-              </div>
-            </div>
-            <div className="section-list">
-              {state.initiatives.map((initiative) => (
-                <article key={initiative.id} className="section-list-static">
-                  <div>
-                    <strong>{initiative.title}</strong>
-                    <p>{initiative.summary}</p>
-                  </div>
-                  <div className="section-list-meta">
-                    <span className={`status-chip ${initiative.status === 'active' ? 'in_progress' : initiative.status === 'complete' ? 'done' : 'planned'}`}>
-                      {initiative.status}
-                    </span>
-                    <span className="domain-badge">{initiative.category}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          {renderTaskList('GTM tasks', 'Execution linked to the growth plan', sectionTasks, getSectionEmptyState('gtm_plan'))}
         </div>
       );
     }
@@ -1261,8 +1035,16 @@ export function CommandCenter() {
     if (activeSection === 'content') {
       return (
         <div className="section-stack">
-          {renderCapabilityPanels('content')}
-          {renderTaskList('Content assets', 'Briefs, drafts, landing page copy, and founder narrative work', sectionTasks, getSectionEmptyState('content'))}
+          <CampaignsPanel
+            agentRuns={state.agentRuns}
+            approvals={state.approvals}
+            artifacts={state.artifacts}
+            founderIntake={founderIntake}
+            goals={state.goals}
+            initiatives={state.initiatives}
+            tasks={state.tasks}
+            onTaskOpen={(task) => setSelectedTask(task)}
+          />
         </div>
       );
     }
@@ -1292,16 +1074,13 @@ export function CommandCenter() {
             approvals={state.approvals}
             artifacts={state.artifacts}
             decisionErrorByTaskId={decisionErrors}
-            pendingExecuteTaskId={executeTaskId}
             pendingApproveTaskId={approveTaskId}
             pendingRejectTaskId={rejectTaskId}
             tasks={state.tasks}
             onApprove={handleApproveArtifact}
-            onRequestRevision={handleExecuteTask}
             onReject={handleRejectArtifact}
             onTaskOpen={(task) => setSelectedTask(task)}
           />
-          {renderTaskList('Founder queue', 'Everything waiting on review, answers, or approval', founderTasks, getSectionEmptyState('approvals'))}
         </div>
       );
     }
@@ -1336,76 +1115,15 @@ export function CommandCenter() {
     if (activeSection === 'settings') {
       return (
         <div className="section-stack">
-          <section className="rail-card section-card">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Founder context</p>
-                <h2>Workspace preferences and operating assumptions</h2>
-              </div>
-            </div>
-            <div className="settings-grid">
-              <article className="settings-card">
-                <span>Website</span>
-                <strong>{founderIntake?.websiteUrl ?? state.project.websiteUrl}</strong>
-              </article>
-              <article className="settings-card">
-                <span>ICP</span>
-                <strong>{founderIntake?.icp ?? state.profile.guessedIcp}</strong>
-              </article>
-              <article className="settings-card">
-                <span>Main goal</span>
-                <strong>{founderIntake?.mainGoal ?? 'Create a clearer growth plan'}</strong>
-              </article>
-              <article className="settings-card">
-                <span>Priority channel</span>
-                <strong>{founderIntake?.keyChannel ?? 'SEO and founder content'}</strong>
-              </article>
-              <article className="settings-card">
-                <span>Collaboration scope</span>
-                <strong>{launchProfile.collaborationScope}</strong>
-              </article>
-              <article className="settings-card">
-                <span>Output quality bar</span>
-                <strong>{launchProfile.outputQualityBar}</strong>
-              </article>
-            </div>
-          </section>
-          <section className="rail-card section-card">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Launch profile</p>
-                <h2>Product direction and pilot defaults</h2>
-              </div>
-            </div>
-            <div className="settings-detail-grid">
-              <article className="settings-detail-card settings-detail-card-lead">
-                <span>Positioning</span>
-                <strong>{launchProfile.positioning}</strong>
-                <p>Northstar should plan work, generate the work, hold review, and keep the founder queue explicit in one system.</p>
-              </article>
-              <article className="settings-detail-card">
-                <span>Launch ICP</span>
-                <strong>{launchProfile.icp}</strong>
-              </article>
-              <article className="settings-detail-card">
-                <span>Providers</span>
-                <div className="settings-chip-row">
-                  {launchProfile.supportedProviders.map((provider) => (
-                    <span key={provider} className="issue-chip">{provider}</span>
-                  ))}
-                </div>
-              </article>
-              <article className="settings-detail-card">
-                <span>Integration targets</span>
-                <div className="settings-chip-row">
-                  {launchProfile.integrationTargets.map((integration) => (
-                    <span key={integration} className="issue-chip">{integration}</span>
-                  ))}
-                </div>
-              </article>
-            </div>
-          </section>
-          <CompanySummary project={state.project} profile={state.profile} snapshot={state.snapshot} />
+          <SettingsPanel
+            activeProviderId={state.activeProviderId}
+            executionProviders={state.executionProviders}
+            founderIntake={founderIntake}
+            integrations={state.integrations}
+            profile={state.profile}
+            project={state.project}
+            onOpenConnections={() => setActiveSection('connections')}
+          />
         </div>
       );
     }
@@ -1426,6 +1144,25 @@ export function CommandCenter() {
           <p className="eyebrow">Northstar</p>
           <h1>Loading the founder workspace.</h1>
           <p className="workspace-topbar-copy">Pulling the latest board, approvals, and founder context before the operating system opens.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (bootstrapError) {
+    return (
+      <main className="app-shell">
+        <div className="sky-orbit sky-orbit-one" />
+        <div className="sky-orbit sky-orbit-two" />
+        <section className="workspace-error-state">
+          <p className="eyebrow">Northstar</p>
+          <h1>Workspace data could not be loaded.</h1>
+          <p className="workspace-topbar-copy">{bootstrapError}</p>
+          <div className="bridge-actions bridge-actions-end">
+            <button className="primary-button" type="button" onClick={() => setBootstrapRetryKey((current) => current + 1)}>
+              Retry load
+            </button>
+          </div>
         </section>
       </main>
     );
@@ -1466,7 +1203,6 @@ export function CommandCenter() {
                   onClick={() => {
                     setPage('dashboard');
                     setActiveSection('board');
-                    setActiveSurface('kanban');
                   }}
                 >
                   Open latest workspace
@@ -1502,97 +1238,56 @@ export function CommandCenter() {
                   <p className="eyebrow">{sectionMeta[activeSection].eyebrow}</p>
                   <h1>{sectionMeta[activeSection].title}</h1>
                   <p className="workspace-topbar-copy">{sectionMeta[activeSection].copy}</p>
-                  <p className="workspace-shortcuts">Shortcuts: `Shift+B` board, `Shift+A` approvals, `Shift+C` command center, `/` search, `Esc` close task.</p>
                 </div>
 
                 <div className="workspace-topbar-actions">
-                  {availableProjects.length > 1 ? (
-                    <label className="workspace-project-switcher">
-                      <span>Workspace</span>
-                      <select
-                        value={selectedProjectId ?? state.project.id}
-                        onChange={async (event) => {
-                          const nextProjectId = event.target.value;
-                          setSelectedProjectId(nextProjectId);
-                          const updated = await api.getState(nextProjectId);
-                          applyState(updated);
-                          setSelectedTask(null);
-                        }}
-                      >
-                        {availableProjects.map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {project.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <button className="ghost-button" type="button" onClick={() => setPage('onboarding')}>
-                    Re-run onboarding
-                  </button>
-                  <button className="primary-button" type="button" onClick={() => setActiveSection('board')}>
+                  <label className="workspace-project-switcher">
+                    <span>Workspace</span>
+                    <select
+                      value={selectedProjectId ?? state.project.id}
+                      onChange={async (event) => {
+                        const nextProjectId = event.target.value;
+                        setSelectedProjectId(nextProjectId);
+                        const updated = await api.getState(nextProjectId);
+                        applyState(updated);
+                        setSelectedTask(null);
+                      }}
+                    >
+                      {availableProjects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="workspace-search-field">
+                    <span>Search</span>
+                    <input
+                      ref={boardSearchRef}
+                      value={boardQuery}
+                      onChange={(event) => setBoardQuery(event.target.value)}
+                      placeholder="Search tasks, rationale, or output"
+                    />
+                  </label>
+                  <div className="workspace-connection-strip" aria-label="Connected account state">
+                    <span className="workspace-connection-chip connection-status-connected">
+                      {accountSummary.connected} connected
+                    </span>
+                    <span className="workspace-connection-chip connection-status-needs_key">
+                      {accountSummary.needs_reconnect} needs reconnect
+                    </span>
+                    <span className="workspace-connection-chip connection-status-planned">
+                      {accountSummary.not_connected} not connected
+                    </span>
+                  </div>
+                  <button className="primary-button" type="button" disabled={activeSection === 'board'} onClick={() => setActiveSection('board')}>
                     Open board
                   </button>
                 </div>
               </div>
-
-              <div className="workspace-meta-bar">
-                <div className="surface-switch">
-                  {surfaceOptions.map((option) => (
-                    <button
-                      key={option.key}
-                      className={`surface-pill ${activeSurface === option.key ? 'surface-pill-active' : ''}`}
-                      type="button"
-                      onClick={() => setActiveSurface(option.key)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="workspace-meta-strip">
-                  <span>{formatDomain(state.project.websiteUrl)}</span>
-                  <span>{queuedCount} queued</span>
-                  <span>{liveCount} live</span>
-                  <span>{connectedIntegrations}/{state.integrations.length} connections</span>
-                  {state.founderSession ? <span>{state.founderSession.displayName}</span> : null}
-                  {latestRun ? <span>Last run {formatDateTime(latestRun.startedAt)}</span> : null}
-                </div>
-              </div>
-
-              <div className="operator-strip">
-                <article className="operator-card">
-                  <span>Northstar is doing</span>
-                  <strong>{northstarTasks[0]?.title ?? 'No active agent work right now.'}</strong>
-                  <p>{northstarTasks[0]?.description ?? 'Open the board to queue the next execution block.'}</p>
-                </article>
-
-                <article className="operator-card operator-card-founder">
-                  <span>Founder needs to do</span>
-                  <strong>{founderTasks[0]?.title ?? 'No founder actions are waiting.'}</strong>
-                  <p>{founderTasks[0]?.description ?? 'Northstar has a clear runway for the next pass.'}</p>
-                </article>
-              </div>
-
-              <div className="workspace-context-grid">
-                <article className="context-card">
-                  <span>Current focus</span>
-                  <strong>{boardSignals.now?.title ?? boardSignals.next?.title ?? 'Clear runway'}</strong>
-                </article>
-                <article className="context-card">
-                  <span>Main goal</span>
-                  <strong>{founderIntake?.mainGoal ?? 'Build a founder-usable growth system'}</strong>
-                </article>
-                <article className="context-card">
-                  <span>Priority channel</span>
-                  <strong>{founderIntake?.keyChannel ?? 'SEO and founder content'}</strong>
-                </article>
-                <article className="context-card">
-                  <span>Founder bottleneck</span>
-                  <strong>{humanize(founderIntake?.bottleneck ?? 'conversion')}</strong>
-                </article>
-              </div>
             </header>
+
+            {bootstrapNotice ? <div className="workspace-status-banner">{bootstrapNotice}</div> : null}
 
             {renderSectionContent()}
           </div>
@@ -1601,6 +1296,7 @@ export function CommandCenter() {
 
       <TaskDrawer
         approval={selectedApproval}
+        approvalView={activeSection === 'approvals'}
         approveLoading={approveTaskId === selectedTask?.id}
         artifact={selectedArtifact}
         commentError={selectedTask ? commentErrors[selectedTask.id] ?? null : null}
@@ -1611,6 +1307,7 @@ export function CommandCenter() {
         executionProviders={state.executionProviders}
         executeLoading={executeTaskId === selectedTask?.id}
         activeProviderId={state.activeProviderId}
+        founderIntake={founderIntake}
         integrations={state.integrations}
         onAddComment={handleAddComment}
         onApprove={handleApproveArtifact}

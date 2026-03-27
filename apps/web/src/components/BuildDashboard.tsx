@@ -33,9 +33,9 @@ export function BuildDashboard({ phases }: BuildDashboardProps) {
       <header className="build-dashboard-hero">
         <div>
           <p className="eyebrow">Build dashboard</p>
-          <h2>What is being built right now</h2>
+          <h2>Wave plan and current shell pass</h2>
           <p className="summary-copy">
-            This tracks the current cleanup pass so you can see what is live, what is next, and what is intentionally waiting.
+            Dashboard is secondary in Wave 1. The board remains the default operating surface while this view tracks what is shipping next.
           </p>
         </div>
         <div className="build-dashboard-metrics">

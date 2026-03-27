@@ -1,4 +1,5 @@
 import { demoState } from "./mockData";
+import { supportedManualTaskTypes } from "./taskConfig";
 import type {
   AppState,
   Approval,
@@ -179,6 +180,7 @@ interface BackendProjectSummary {
 }
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const supportedManualTaskTypeSet = new Set(supportedManualTaskTypes.map((task) => task.value));
 const maskSecret = (value: string) => {
   const normalized = value.trim();
   if (!normalized) {
@@ -358,6 +360,41 @@ const normalizeTask = (task: Task): Task => {
   };
 };
 
+const getDefaultExecutionProviders = (): ExecutionProvider[] => clone(demoState.executionProviders).map((provider) => ({
+  ...provider,
+  status: provider.authType === "cli" ? "available" : "needs_key",
+  maskedSecret: undefined,
+  connectedAt: undefined,
+  isDefault: provider.id === demoState.activeProviderId,
+}));
+
+const getDefaultIntegrations = (): Integration[] => clone(demoState.integrations).map((integration) => ({
+  ...integration,
+  status: integration.authType === "api_key" ? "needs_key" : "planned",
+  connectedAs: undefined,
+  maskedSecret: undefined,
+  connectedAt: undefined,
+  lastSyncAt: undefined,
+}));
+
+const createCachedFallbackState = (): AppState => ({
+  ...clone(demoState),
+  founderIntake: null,
+  founderSession: null,
+  tasks: [],
+  artifacts: [],
+  approvals: [],
+  comments: [],
+  agentRuns: [],
+  goals: [],
+  initiatives: [],
+  executionProviders: getDefaultExecutionProviders(),
+  activeProviderId: demoState.activeProviderId,
+  integrations: getDefaultIntegrations(),
+  crmContacts: [],
+  researchNotes: [],
+});
+
 const loadIntegrationOverrides = (): Record<string, IntegrationOverride> => {
   const raw = window.localStorage.getItem(INTEGRATION_OVERRIDES_KEY);
   if (!raw) {
@@ -369,10 +406,6 @@ const loadIntegrationOverrides = (): Record<string, IntegrationOverride> => {
   } catch {
     return {};
   }
-};
-
-const saveIntegrationOverrides = (overrides: Record<string, IntegrationOverride>) => {
-  window.localStorage.setItem(INTEGRATION_OVERRIDES_KEY, JSON.stringify(overrides));
 };
 
 const mergeIntegrationOverrides = (integrations: Integration[]): Integration[] => {
@@ -395,7 +428,7 @@ const mergeIntegrationOverrides = (integrations: Integration[]): Integration[] =
 };
 
 const hydrateState = (state: AppState): AppState => {
-  const base = clone(demoState);
+  const base = createCachedFallbackState();
   const integrations = mergeIntegrationOverrides(state.integrations ?? base.integrations);
   const tasks = (state.tasks?.length ? state.tasks : base.tasks).map(normalizeTask);
   const founderIntake = state.founderIntake ?? base.founderIntake;
@@ -419,18 +452,20 @@ const hydrateState = (state: AppState): AppState => {
   };
 };
 
-const loadState = (): AppState => {
+const readStoredState = (): AppState | null => {
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    return hydrateState(clone(demoState));
+    return null;
   }
 
   try {
     return hydrateState(JSON.parse(raw) as AppState);
   } catch {
-    return hydrateState(clone(demoState));
+    return null;
   }
 };
+
+const loadState = (): AppState => readStoredState() ?? hydrateState(createCachedFallbackState());
 
 const saveState = (state: AppState) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -584,8 +619,8 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       websiteUrl: configuration.founder_intake.website_url,
       businessDescription: configuration.founder_intake.business_description ?? dashboard.company_profile.company_summary,
       icp: configuration.founder_intake.icp ?? dashboard.company_profile.guessed_icp,
-      mainGoal: configuration.founder_intake.main_goal ?? demoState.founderIntake?.mainGoal ?? "",
-      keyChannel: configuration.founder_intake.key_channel ?? demoState.founderIntake?.keyChannel ?? "",
+      mainGoal: configuration.founder_intake.main_goal ?? "",
+      keyChannel: configuration.founder_intake.key_channel ?? "",
       whatTried: configuration.founder_intake.what_tried ?? "",
       priorityWork: configuration.founder_intake.priority_work ?? "",
       competitors: configuration.founder_intake.competitors ?? "",
@@ -593,7 +628,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       authMethod: configuration.founder_intake.auth_method ?? configuration.founder_session?.auth_method ?? "google",
       email: configuration.founder_intake.email ?? configuration.founder_session?.email,
     }
-    : demoState.founderIntake;
+    : null;
 
   const founderSession: FounderSession | null = configuration?.founder_session
     ? {
@@ -602,7 +637,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       status: configuration.founder_session.status,
       displayName: configuration.founder_session.display_name,
     }
-    : demoState.founderSession;
+    : null;
 
   const executionProviders: ExecutionProvider[] = configuration?.execution_provider?.providers?.length
     ? configuration.execution_provider.providers.map((provider) => ({
@@ -616,7 +651,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       maskedSecret: provider.masked_secret,
       connectedAt: provider.connected_at,
     }))
-    : demoState.executionProviders;
+    : getDefaultExecutionProviders();
 
   const integrations: Integration[] = configuration?.integrations?.length
     ? configuration.integrations.map((integration) => ({
@@ -633,7 +668,40 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       connectedAt: integration.connected_at,
       lastSyncAt: integration.last_sync_at,
     }))
-    : demoState.integrations;
+    : getDefaultIntegrations();
+
+  const tasks: Task[] = dashboard.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    type: backendTypeToUi[task.type],
+    category: getTaskCategory(backendTypeToUi[task.type]),
+    source: task.source.toLowerCase() as Task["source"],
+    status: backendStatusToUi[task.status],
+    impact: task.impact,
+    effort: task.effort,
+    confidence: task.confidence,
+    goal_fit: task.goal_fit,
+    priority_score: task.priority_score,
+    rationale: task.rationale,
+    dependencies: task.dependencies,
+    actor: getTaskActor({
+      owner_type: task.owner_type === "AGENT" ? "agent" : task.owner_type === "USER" ? "user" : "human",
+      status: backendStatusToUi[task.status],
+      type: backendTypeToUi[task.type],
+    }),
+    needsFounderAction: backendStatusToUi[task.status] === "waiting_for_approval",
+    owner_type:
+      task.owner_type === "AGENT" ? "agent" : task.owner_type === "USER" ? "user" : "human",
+    movement_history: task.movement_history.map((movement) => ({
+      from: movement.from ? backendStatusToUi[movement.from] : null,
+      to: backendStatusToUi[movement.to],
+      reason: movement.reason,
+      at: movement.at
+    })),
+    created_at: task.created_at,
+    updated_at: task.updated_at
+  }));
 
   return hydrateState({
     workspace: {
@@ -671,38 +739,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
     },
     founderIntake,
     founderSession,
-    tasks: dashboard.tasks.map((task) => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      type: backendTypeToUi[task.type],
-      category: getTaskCategory(backendTypeToUi[task.type]),
-      source: task.source.toLowerCase() as Task["source"],
-      status: backendStatusToUi[task.status],
-      impact: task.impact,
-      effort: task.effort,
-      confidence: task.confidence,
-      goal_fit: task.goal_fit,
-      priority_score: task.priority_score,
-      rationale: task.rationale,
-      dependencies: task.dependencies,
-      actor: getTaskActor({
-        owner_type: task.owner_type === "AGENT" ? "agent" : task.owner_type === "USER" ? "user" : "human",
-        status: backendStatusToUi[task.status],
-        type: backendTypeToUi[task.type],
-      }),
-      needsFounderAction: backendStatusToUi[task.status] === "waiting_for_approval",
-      owner_type:
-        task.owner_type === "AGENT" ? "agent" : task.owner_type === "USER" ? "user" : "human",
-      movement_history: task.movement_history.map((movement) => ({
-        from: movement.from ? backendStatusToUi[movement.from] : null,
-        to: backendStatusToUi[movement.to],
-        reason: movement.reason,
-        at: movement.at
-      })),
-      created_at: task.created_at,
-      updated_at: task.updated_at
-    })),
+    tasks,
     artifacts,
     approvals,
     comments: (dashboard.comments ?? []).map((comment) => ({
@@ -721,13 +758,13 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       startedAt: run.created_at,
       finishedAt: run.updated_at
     })),
-    goals: demoState.goals,
-    initiatives: demoState.initiatives,
+    goals: deriveGoals(founderIntake, tasks),
+    initiatives: deriveInitiatives(founderIntake, tasks),
     executionProviders,
     activeProviderId: configuration?.execution_provider?.active_provider ?? demoState.activeProviderId,
     integrations,
-    crmContacts: demoState.crmContacts,
-    researchNotes: demoState.researchNotes,
+    crmContacts: [],
+    researchNotes: [],
   });
 };
 
@@ -785,10 +822,6 @@ const persistAndReturn = (state: AppState) => {
   return clone(next);
 };
 
-const fallbackApi = {
-  getState: async () => persistAndReturn(loadState())
-};
-
 const createMutationError = (message: string) => new Error(message);
 
 const getPendingApprovalForTask = (taskId: string) => {
@@ -798,312 +831,6 @@ const getPendingApprovalForTask = (taskId: string) => {
   }
 
   return approval;
-};
-
-const moveTaskLocally = (taskId: string, status: TaskStatus) => {
-  const updated: AppState = {
-    ...latestState,
-    tasks: latestState.tasks.map((task) => {
-      if (task.id !== taskId) {
-        return task;
-      }
-
-      const actor = status === "waiting_on_founder" ? "founder" : task.actor;
-      return normalizeTask({
-        ...task,
-        status,
-        actor,
-        updated_at: new Date().toISOString(),
-        movement_history: [
-          ...task.movement_history,
-          {
-            from: task.status,
-            to: status,
-            reason: status === "waiting_on_founder"
-              ? "Founder input is required before Northstar should continue."
-              : "Lane updated from the board.",
-            at: new Date().toISOString(),
-          },
-        ],
-      });
-    }),
-  };
-
-  return persistAndReturn(updated);
-};
-
-const describeExecutionMode = (mode: ExecutionPreference["mode"]) => {
-  switch (mode) {
-    case "send_ready":
-      return "send-ready handoff";
-    case "implementation_handoff":
-      return "implementation handoff";
-    default:
-      return "founder review draft";
-  }
-};
-
-const buildLocalArtifactContent = (task: Task, state: AppState, preference?: ExecutionPreference): Artifact => {
-  const createdAt = new Date().toISOString();
-  const companyName = state.profile.companyName;
-  const summary = state.profile.summary;
-  const icp = state.profile.guessedIcp;
-  const providerLabel = preference?.provider ?? "Northstar draft engine";
-  const modeLabel = preference ? describeExecutionMode(preference.mode) : "founder review draft";
-
-  if (task.type === "email_template") {
-    return {
-      id: `local-artifact-${task.id}`,
-      taskId: task.id,
-      type: "email_template",
-      title: `${task.title} - Email draft`,
-      channel: "email",
-      deliveryStage: "ready_for_review",
-      status: "needs_review",
-      summary: `A ${modeLabel} prepared with ${providerLabel}.`,
-      content: [
-        "# Email Template",
-        "",
-        "## Execution setup",
-        `Provider: ${providerLabel}`,
-        `Mode: ${modeLabel}`,
-        "",
-        "## Subject",
-        `A clearer next step for ${companyName}`,
-        "",
-        "## Audience",
-        icp,
-        "",
-        "## Draft",
-        `Hi {{first_name}},`,
-        "",
-        `I wanted to send a concise follow-up because ${summary.toLowerCase()}.`,
-        "",
-        "The clearest next step from our side is to show how this would fit your current workflow without adding more coordination overhead.",
-        "",
-        "If useful, I can send a short walkthrough tailored to your current priorities.",
-        "",
-        "Best,",
-        "{{founder_name}}",
-      ].join("\n"),
-      createdAt,
-    };
-  }
-
-  return {
-    id: `local-artifact-${task.id}`,
-    taskId: task.id,
-    type: "blog_brief",
-    title: `${task.title} - Draft`,
-    channel: "internal",
-    deliveryStage: "ready_for_review",
-    status: "needs_review",
-    summary: `A ${modeLabel} attached locally with ${providerLabel}.`,
-    content: `# ${task.title}\n\n## Execution setup\n- Provider: ${providerLabel}\n- Mode: ${modeLabel}\n\n## Notes\nNorthstar generated a local draft for review.`,
-    createdAt,
-  };
-};
-
-const createLocalTask = (input: NewTaskInput): AppState => {
-  const createdAt = new Date().toISOString();
-  const task = normalizeTask({
-    id: `local-task-${Math.random().toString(36).slice(2, 10)}`,
-    title: input.title,
-    description: input.description ?? "",
-    type: input.type,
-    category: getTaskCategory(input.type),
-    source: "user",
-    status: "inbox",
-    impact: input.impact,
-    effort: input.effort,
-    confidence: input.confidence,
-    goal_fit: input.goal_fit,
-    priority_score: Number((((input.impact * input.confidence * input.goal_fit) / input.effort).toFixed(2))),
-    rationale: "Why this exists: Founder-added work entered the board manually.\nWhy this priority: Northstar should score it against the same operating model.\nBusiness outcome: The task should produce a concrete asset or decision path for the founder.",
-    dependencies: [],
-    actor: input.owner_type === "agent" ? "northstar" : "founder",
-    needsFounderAction: input.owner_type !== "agent",
-    channel: getTaskChannel(input.type),
-    outputLabel: undefined,
-    executionStage: "strategy",
-    owner_type: input.owner_type,
-    movement_history: [
-      {
-        from: null,
-        to: "inbox",
-        reason: "Founder added this task manually to the board.",
-        at: createdAt,
-      },
-    ],
-    created_at: createdAt,
-    updated_at: createdAt,
-  });
-
-  return persistAndReturn({
-    ...latestState,
-    tasks: [task, ...latestState.tasks],
-  });
-};
-
-const executeTaskLocally = (taskId: string, preference?: ExecutionPreference): AppState => {
-  const task = latestState.tasks.find((item) => item.id === taskId);
-  if (!task) {
-    throw createMutationError("Task not found.");
-  }
-
-  const artifact = buildLocalArtifactContent(task, latestState, preference);
-  const approval: Approval = {
-    id: `local-approval-${task.id}`,
-    taskId: task.id,
-    status: "pending",
-    requestedAt: artifact.createdAt,
-    note: preference
-      ? `Founder review is required before this ${describeExecutionMode(preference.mode)} can move forward via ${preference.provider}.`
-      : "Founder review is required before this generated draft can move forward.",
-  };
-
-  return persistAndReturn({
-    ...latestState,
-    tasks: latestState.tasks.map((item) => item.id === task.id ? normalizeTask({
-      ...item,
-      status: "waiting_for_approval",
-      executionStage: "ready_for_review",
-      actor: "founder",
-      needsFounderAction: true,
-      updated_at: artifact.createdAt,
-      movement_history: [
-        ...item.movement_history,
-        {
-          from: item.status,
-          to: "waiting_for_approval",
-          reason: "Generated a draft locally and routed it into founder review.",
-          at: artifact.createdAt,
-        },
-      ],
-    }) : item),
-    artifacts: [artifact, ...latestState.artifacts.filter((item) => item.taskId !== task.id)],
-    approvals: [approval, ...latestState.approvals.filter((item) => item.taskId !== task.id)],
-  });
-};
-
-const decideLocalApproval = (taskId: string, decision: "approved" | "rejected", note?: string) => {
-  const decidedAt = new Date().toISOString();
-  return persistAndReturn({
-    ...latestState,
-    approvals: latestState.approvals.map((approval) => approval.taskId === taskId && approval.status === "pending"
-      ? {
-        ...approval,
-        status: decision,
-        decidedAt,
-        note: note?.trim() || approval.note,
-      }
-      : approval),
-    artifacts: latestState.artifacts.map((artifact) => artifact.taskId === taskId
-      ? {
-        ...artifact,
-        status: decision === "approved" ? "approved" : "rejected",
-      }
-      : artifact),
-    tasks: latestState.tasks.map((task) => task.id === taskId
-      ? normalizeTask({
-        ...task,
-        status: decision === "approved" ? "done" : "blocked",
-        actor: decision === "approved" ? "northstar" : "founder",
-        needsFounderAction: decision !== "approved",
-        updated_at: decidedAt,
-        movement_history: [
-          ...task.movement_history,
-          {
-            from: task.status,
-            to: decision === "approved" ? "done" : "blocked",
-            reason: decision === "approved"
-              ? "Founder approved the locally generated asset."
-              : "Founder rejected the locally generated asset.",
-            at: decidedAt,
-          },
-        ],
-      })
-      : task),
-    comments: decision === "rejected" && note?.trim()
-      ? [
-        ...latestState.comments,
-        {
-          id: `local-comment-${Math.random().toString(36).slice(2, 10)}`,
-          taskId,
-          author: "Founder",
-          body: note.trim(),
-          createdAt: decidedAt,
-        },
-      ]
-      : latestState.comments,
-  });
-};
-
-const updateIntegrationLocally = (
-  integrationId: string,
-  updater: (integration: Integration) => Integration,
-): AppState => {
-  let updatedIntegration: Integration | null = null;
-  const integrations = latestState.integrations.map((integration) => {
-    if (integration.id !== integrationId) {
-      return integration;
-    }
-
-    updatedIntegration = updater(integration);
-    return updatedIntegration;
-  });
-
-  if (!updatedIntegration) {
-    throw createMutationError("Integration not found.");
-  }
-
-  const resolvedIntegration = updatedIntegration as Integration;
-
-  const overrides = loadIntegrationOverrides();
-  saveIntegrationOverrides({
-    ...overrides,
-    [integrationId]: {
-      ...(resolvedIntegration.status ? { status: resolvedIntegration.status } : {}),
-      connectedAt: resolvedIntegration.connectedAt ?? null,
-      lastSyncAt: resolvedIntegration.lastSyncAt ?? null,
-      connectedAs: resolvedIntegration.connectedAs ?? null,
-      maskedSecret: resolvedIntegration.maskedSecret ?? null,
-    },
-  });
-
-  return persistAndReturn({
-    ...latestState,
-    integrations,
-  });
-};
-
-const updateProviderLocally = (
-  providerId: string,
-  updater: (provider: ExecutionProvider) => ExecutionProvider,
-  nextActiveProviderId = latestState.activeProviderId,
-): AppState => {
-  let updatedProvider: ExecutionProvider | null = null;
-  const executionProviders = latestState.executionProviders.map((provider) => {
-    const nextProvider = provider.id === providerId ? updater(provider) : provider;
-    if (nextProvider.id === providerId) {
-      updatedProvider = nextProvider;
-    }
-
-    return {
-      ...nextProvider,
-      isDefault: nextProvider.id === nextActiveProviderId,
-    };
-  });
-
-  if (!updatedProvider) {
-    throw createMutationError("Execution provider not found.");
-  }
-
-  return persistAndReturn({
-    ...latestState,
-    executionProviders,
-    activeProviderId: nextActiveProviderId,
-  });
 };
 
 const buildWorkspaceConfigurationPayload = (overrides?: {
@@ -1178,6 +905,8 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
 export interface FounderApi {
   getState: (projectId?: string) => Promise<AppState>;
   listProjects: () => Promise<BackendProjectSummary[]>;
+  getCachedState: () => AppState | null;
+  listCachedProjects: () => BackendProjectSummary[];
   analyzeWebsite: (intake: FounderIntake) => Promise<AppState>;
   addTask: (input: NewTaskInput) => Promise<AppState>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<AppState>;
@@ -1194,38 +923,45 @@ export interface FounderApi {
 
 export const createFounderApi = (): FounderApi => ({
   getState: async (projectId?: string) => {
-    try {
+    if (!projectId) {
       const projectResponse = await fetchJson<{ projects: Array<{ id: string }> }>("/projects");
       if (projectResponse.projects.length === 0) {
-        return persistAndReturn(loadState());
+        throw new Error("No projects found yet.");
       }
 
-      const selectedProjectId = projectId ?? projectResponse.projects[0].id;
-      const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${selectedProjectId}/dashboard`);
-      return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
-    } catch {
-      return fallbackApi.getState();
+      projectId = projectResponse.projects[0].id;
     }
+
+    const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${projectId}/dashboard`);
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
   },
   listProjects: async () => {
-    try {
-      const projectResponse = await fetchJson<{ projects: Array<{ id: string; workspaceId?: string; workspace_id?: string; name: string; websiteUrl?: string; website_url?: string; createdAt?: string; created_at?: string }> }>("/projects");
-      return projectResponse.projects.map((project) => ({
-        id: project.id,
-        workspaceId: project.workspaceId ?? project.workspace_id,
-        name: project.name,
-        websiteUrl: project.websiteUrl ?? project.website_url ?? "",
-        createdAt: project.createdAt ?? project.created_at,
-      }));
-    } catch {
-      return [{
-        id: latestState.project.id,
-        workspaceId: latestState.project.workspaceId,
-        name: latestState.project.name,
-        websiteUrl: latestState.project.websiteUrl,
-        createdAt: latestState.project.createdAt,
-      }];
+    const projectResponse = await fetchJson<{ projects: Array<{ id: string; workspaceId?: string; workspace_id?: string; name: string; websiteUrl?: string; website_url?: string; createdAt?: string; created_at?: string }> }>("/projects");
+    return projectResponse.projects.map((project) => ({
+      id: project.id,
+      workspaceId: project.workspaceId ?? project.workspace_id,
+      name: project.name,
+      websiteUrl: project.websiteUrl ?? project.website_url ?? "",
+      createdAt: project.createdAt ?? project.created_at,
+    }));
+  },
+  getCachedState: () => {
+    const cached = readStoredState();
+    return cached ? clone(cached) : null;
+  },
+  listCachedProjects: () => {
+    const cached = readStoredState();
+    if (!cached) {
+      return [];
     }
+
+    return [{
+      id: cached.project.id,
+      workspaceId: cached.project.workspaceId,
+      name: cached.project.name,
+      websiteUrl: cached.project.websiteUrl,
+      createdAt: cached.project.createdAt,
+    }];
   },
   analyzeWebsite: async (intake: FounderIntake) => {
     const response = await fetchJson<{ dashboard: BackendDashboard }>("/projects/onboard", {
@@ -1247,8 +983,8 @@ export const createFounderApi = (): FounderApi => ({
     return persistAndReturn(mapDashboard(response.dashboard));
   },
   addTask: async (input: NewTaskInput) => {
-    if (input.type === "email_template") {
-      return createLocalTask(input);
+    if (!supportedManualTaskTypeSet.has(input.type)) {
+      throw createMutationError(`${input.type.replaceAll("_", " ")} is not supported in this build yet.`);
     }
 
     await fetchJson<{ task: { id: string } }>(`/projects/${latestState.project.id}/tasks`, {
@@ -1269,7 +1005,7 @@ export const createFounderApi = (): FounderApi => ({
   },
   updateTaskStatus: async (taskId: string, status: TaskStatus) => {
     if (status === "waiting_on_founder") {
-      return moveTaskLocally(taskId, status);
+      throw createMutationError("Move founder-dependent work through approvals or keep it blocked in this build.");
     }
 
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/status`, {
@@ -1278,14 +1014,14 @@ export const createFounderApi = (): FounderApi => ({
     });
     return persistAndReturn(mapDashboard(response.dashboard));
   },
-  executeTask: async (taskId: string, preference?: ExecutionPreference) => {
+  executeTask: async (taskId: string, _preference?: ExecutionPreference) => {
     const task = latestState.tasks.find((item) => item.id === taskId);
     if (!task) {
       throw createMutationError("Task not found.");
     }
 
-    if (task.type === "email_template") {
-      return executeTaskLocally(taskId, preference);
+    if (task.type !== "blog_brief") {
+      throw createMutationError("Only blog brief execution is supported in this build.");
     }
 
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/execute`, {
@@ -1295,9 +1031,6 @@ export const createFounderApi = (): FounderApi => ({
   },
   approveArtifact: async (taskId: string) => {
     const approval = getPendingApprovalForTask(taskId);
-    if (approval.id.startsWith("local-approval-")) {
-      return decideLocalApproval(taskId, "approved");
-    }
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
       method: "POST",
       body: JSON.stringify({ decision: "APPROVED" })
@@ -1306,9 +1039,6 @@ export const createFounderApi = (): FounderApi => ({
   },
   rejectArtifact: async (taskId: string, note?: string) => {
     const approval = getPendingApprovalForTask(taskId);
-    if (approval.id.startsWith("local-approval-")) {
-      return decideLocalApproval(taskId, "rejected", note);
-    }
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
       method: "POST",
       body: JSON.stringify({
@@ -1348,20 +1078,11 @@ export const createFounderApi = (): FounderApi => ({
       }
       : item);
 
-    try {
-      const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-        method: "POST",
-        body: JSON.stringify(buildWorkspaceConfigurationPayload({ executionProviders }))
-      });
-      return persistAndReturn(mapDashboard(response.dashboard));
-    } catch {
-      return updateProviderLocally(providerId, (current) => ({
-        ...current,
-        status: "connected",
-        maskedSecret: current.authType === "api_key" ? maskSecret(credential ?? "") : current.maskedSecret,
-        connectedAt,
-      }));
-    }
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({ executionProviders }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
   },
   activateProvider: async (providerId: string) => {
     const provider = latestState.executionProviders.find((item) => item.id === providerId);
@@ -1378,18 +1099,14 @@ export const createFounderApi = (): FounderApi => ({
       isDefault: item.id === providerId,
     }));
 
-    try {
-      const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-        method: "POST",
-        body: JSON.stringify(buildWorkspaceConfigurationPayload({
-          executionProviders,
-          activeProviderId: providerId,
-        }))
-      });
-      return persistAndReturn(mapDashboard(response.dashboard));
-    } catch {
-      return updateProviderLocally(providerId, (current) => current, providerId);
-    }
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({
+        executionProviders,
+        activeProviderId: providerId,
+      }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
   },
   connectIntegration: async (integrationId: string, credential?: string) => {
     const integration = latestState.integrations.find((item) => item.id === integrationId);
@@ -1413,24 +1130,11 @@ export const createFounderApi = (): FounderApi => ({
       lastSyncAt: connectedAt,
     }) : current);
 
-    try {
-      const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-        method: "POST",
-        body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
-      });
-      return persistAndReturn(mapDashboard(response.dashboard));
-    } catch {
-      return updateIntegrationLocally(integrationId, (current) => ({
-        ...current,
-        status: "connected",
-        connectedAs: current.authType === "oauth"
-          ? latestState.founderSession?.displayName ?? "Founder workspace"
-          : `${current.name} workspace`,
-        maskedSecret: current.authType === "api_key" ? maskSecret(credential ?? "") : current.maskedSecret,
-        connectedAt,
-        lastSyncAt: connectedAt,
-      }));
-    }
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
   },
   disconnectIntegration: async (integrationId: string) => {
     const integration = latestState.integrations.find((item) => item.id === integrationId);
@@ -1447,22 +1151,11 @@ export const createFounderApi = (): FounderApi => ({
       lastSyncAt: undefined,
     }) : current);
 
-    try {
-      const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-        method: "POST",
-        body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
-      });
-      return persistAndReturn(mapDashboard(response.dashboard));
-    } catch {
-      return updateIntegrationLocally(integrationId, (current) => ({
-        ...current,
-        status: (current.authType === "api_key" ? "needs_key" : "planned") as Integration["status"],
-        connectedAs: undefined,
-        maskedSecret: undefined,
-        connectedAt: undefined,
-        lastSyncAt: undefined,
-      }));
-    }
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
   },
   syncIntegration: async (integrationId: string) => {
     const integration = latestState.integrations.find((item) => item.id === integrationId);
@@ -1480,17 +1173,10 @@ export const createFounderApi = (): FounderApi => ({
       lastSyncAt,
     }) : current);
 
-    try {
-      const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-        method: "POST",
-        body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
-      });
-      return persistAndReturn(mapDashboard(response.dashboard));
-    } catch {
-      return updateIntegrationLocally(integrationId, (current) => ({
-        ...current,
-        lastSyncAt,
-      }));
-    }
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard));
   }
 });

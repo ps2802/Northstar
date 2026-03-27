@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { Approval, Artifact, Comment, ExecutionPreference, ExecutionProvider, Integration, Task } from '../lib/types';
+import type { Approval, Artifact, Comment, ExecutionPreference, ExecutionProvider, FounderIntake, Integration, Task } from '../lib/types';
 import { formatDateTime, formatScore, parseRationale } from '../lib/format';
+import { executableTaskTypes } from '../lib/taskConfig';
 import { ArtifactViewer } from './ArtifactViewer';
 
 interface TaskDrawerProps {
   approval?: Approval | null;
+  approvalView?: boolean;
   approveLoading?: boolean;
   artifact?: Artifact | null;
   commentError?: string | null;
@@ -15,6 +17,7 @@ interface TaskDrawerProps {
   executionProviders: ExecutionProvider[];
   executeLoading?: boolean;
   activeProviderId: string;
+  founderIntake?: FounderIntake | null;
   integrations: Integration[];
   onAddComment: (taskId: string, body: string) => Promise<boolean>;
   onApprove: (taskId: string) => Promise<boolean>;
@@ -28,7 +31,6 @@ interface TaskDrawerProps {
 }
 
 const humanize = (value: string) => value.replaceAll('_', ' ');
-const executableTaskTypes = new Set(['blog_brief', 'x_post_set', 'linkedin_post_set', 'homepage_copy_suggestion', 'email_template']);
 
 const getProviderOptions = (providers: ExecutionProvider[], activeProviderId: string) => {
   return providers.map((provider) => ({
@@ -60,6 +62,7 @@ const getModeOptions = (task: Task) => {
 
 export function TaskDrawer({
   approval,
+  approvalView = false,
   approveLoading,
   artifact,
   commentError,
@@ -70,6 +73,7 @@ export function TaskDrawer({
   executionProviders,
   executeLoading,
   activeProviderId,
+  founderIntake,
   integrations,
   onAddComment,
   onApprove,
@@ -137,6 +141,103 @@ export function TaskDrawer({
   } else if (canExecute) {
     decisionTitle = `Generate ${executionLabel}`;
     decisionCopy = 'Running this will generate a founder-reviewable draft, create an approval item, and move the task into founder review.';
+  }
+
+  if (approvalView) {
+    const approvalGoal = rationale.businessOutcome || founderIntake?.mainGoal || 'Keep the draft aligned to the current company goal.';
+    const approvalAudience = founderIntake?.icp || 'Audience is inferred from the current workspace context.';
+    const approvalChannel = artifact?.channel ? humanize(artifact.channel) : channelLabel;
+    const approvalStatusLabel = approval?.status === 'rejected'
+      ? 'Changes requested'
+      : approval?.status === 'approved'
+        ? 'Approved'
+        : approval?.status === 'pending'
+          ? 'Waiting on me'
+          : humanize(task.status);
+
+    return (
+      <div className="drawer-backdrop" onClick={onClose}>
+        <aside className="drawer approval-drawer" onClick={(event) => event.stopPropagation()}>
+          <header className="drawer-header">
+            <div>
+              <p className="eyebrow">Approval detail</p>
+              <h2>{task.title}</h2>
+            </div>
+            <div className="drawer-header-actions">
+              <span className={`status-chip ${approval?.status === 'rejected' ? 'blocked' : approval?.status === 'approved' ? 'done' : task.status}`}>{approvalStatusLabel}</span>
+              <button className="ghost-button" type="button" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </header>
+
+          <div className="drawer-body approval-drawer-body">
+            <ArtifactViewer artifact={artifact ?? null} embedded />
+
+            <section className="approval-detail-grid">
+              <article className="detail-card">
+                <p className="eyebrow">Goal</p>
+                <p>{approvalGoal}</p>
+              </article>
+              <article className="detail-card">
+                <p className="eyebrow">Audience</p>
+                <p>{approvalAudience}</p>
+              </article>
+              <article className="detail-card">
+                <p className="eyebrow">Channel</p>
+                <p>{approvalChannel}</p>
+              </article>
+              <article className="detail-card">
+                <p className="eyebrow">Notes</p>
+                <p>{approval?.note ?? 'No review note has been added yet.'}</p>
+              </article>
+            </section>
+
+            {decisionError ? <p className="inline-error">{decisionError}</p> : null}
+
+            {approval?.status === 'pending' ? (
+              <section className="detail-card approval-decision-card">
+                <label className="approval-note-field">
+                  Request changes note <span className="field-optional">Optional</span>
+                  <textarea
+                    disabled={decisionBusy}
+                    rows={3}
+                    value={rejectionNote}
+                    onChange={(event) => setRejectionNote(event.target.value)}
+                    placeholder="Tell Northstar what needs to change before the next pass."
+                  />
+                </label>
+                <div className="approval-detail-actions">
+                  <button
+                    className="primary-button secondary"
+                    type="button"
+                    disabled={decisionBusy}
+                    onClick={async () => {
+                      await onApprove(task.id);
+                    }}
+                  >
+                    {approveLoading ? 'Approving...' : 'Approve'}
+                  </button>
+                  <button
+                    className="ghost-button danger-button"
+                    type="button"
+                    disabled={decisionBusy}
+                    onClick={async () => {
+                      const rejected = await onReject(task.id, rejectionNote);
+                      if (rejected) {
+                        setRejectionNote('');
+                      }
+                    }}
+                  >
+                    {rejectLoading ? 'Requesting...' : 'Request changes'}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+          </div>
+        </aside>
+      </div>
+    );
   }
 
   return (
