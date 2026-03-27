@@ -24,6 +24,12 @@ export const ownerTypes = ["AGENT", "USER", "SYSTEM"] as const;
 export const artifactTypes = ["BLOG_BRIEF"] as const;
 export const artifactStatuses = ["DRAFT", "WAITING_FOR_APPROVAL", "APPROVED", "REJECTED"] as const;
 export const approvalStatuses = ["PENDING", "APPROVED", "REJECTED"] as const;
+export const sessionRoles = ["FOUNDER", "MEMBER"] as const;
+export const sessionStatuses = ["ACTIVE", "REVOKED", "EXPIRED"] as const;
+export const providerSetupStatuses = ["NOT_CONFIGURED", "CONFIGURED", "ERROR"] as const;
+export const connectionStatuses = ["DISCONNECTED", "PENDING", "CONNECTED", "ERROR"] as const;
+export const revisionStatuses = ["REQUESTED", "SUBMITTED", "APPROVED", "REJECTED"] as const;
+export const executionJobStatuses = ["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELED"] as const;
 
 export type TaskStatus = (typeof taskStatuses)[number];
 export type TaskType = (typeof taskTypes)[number];
@@ -32,6 +38,12 @@ export type OwnerType = (typeof ownerTypes)[number];
 export type ArtifactType = (typeof artifactTypes)[number];
 export type ArtifactStatus = (typeof artifactStatuses)[number];
 export type ApprovalStatus = (typeof approvalStatuses)[number];
+export type SessionRole = (typeof sessionRoles)[number];
+export type SessionStatus = (typeof sessionStatuses)[number];
+export type ProviderSetupStatus = (typeof providerSetupStatuses)[number];
+export type ConnectionStatus = (typeof connectionStatuses)[number];
+export type RevisionStatus = (typeof revisionStatuses)[number];
+export type ExecutionJobStatus = (typeof executionJobStatuses)[number];
 
 export interface Workspace {
   id: string;
@@ -98,6 +110,7 @@ export interface Task {
   confidence: number;
   goal_fit: number;
   priority_score: number;
+  context_boost?: number;
   rationale: string;
   dependencies: string[];
   owner_type: OwnerType;
@@ -137,6 +150,8 @@ export interface Approval {
   status: ApprovalStatus;
   requested_by: string;
   decision_note?: string | null;
+  decided_by?: string | null;
+  decided_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -147,6 +162,108 @@ export interface Comment {
   task_id?: string | null;
   body: string;
   author: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FounderIntake {
+  id: string;
+  project_id: string;
+  founder_name?: string | null;
+  founder_email?: string | null;
+  business_description?: string | null;
+  current_goals: string[];
+  initiatives: string[];
+  answers: Record<string, string>;
+  planning_context?: string | null;
+  last_submitted_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceSession {
+  id: string;
+  workspace_id: string;
+  project_id?: string | null;
+  founder_intake_id?: string | null;
+  email: string;
+  name: string;
+  role: SessionRole;
+  status: SessionStatus;
+  last_seen_at?: string | null;
+  expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionProviderConfig {
+  id: string;
+  workspace_id: string;
+  provider_key: string;
+  label: string;
+  auth_type: string;
+  status: ProviderSetupStatus;
+  base_url?: string | null;
+  default_model?: string | null;
+  scopes: string[];
+  config?: Record<string, unknown> | null;
+  last_validated_at?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  workspace_id: string;
+  project_id?: string | null;
+  provider_key: string;
+  label: string;
+  auth_type: string;
+  status: ConnectionStatus;
+  external_account_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  sync_state?: Record<string, unknown> | null;
+  last_synced_at?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArtifactRevision {
+  id: string;
+  project_id: string;
+  artifact_id: string;
+  approval_id?: string | null;
+  requested_by: string;
+  status: RevisionStatus;
+  instruction: string;
+  submitted_content?: string | null;
+  change_summary?: string | null;
+  submitted_at?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionJob {
+  id: string;
+  project_id: string;
+  task_id?: string | null;
+  artifact_id?: string | null;
+  revision_id?: string | null;
+  provider_config_id?: string | null;
+  run_type: string;
+  queue_name: string;
+  status: ExecutionJobStatus;
+  dedupe_key?: string | null;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error_message?: string | null;
+  attempt_count: number;
+  queued_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

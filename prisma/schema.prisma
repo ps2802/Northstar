@@ -58,30 +58,77 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum SessionRole {
+  FOUNDER
+  MEMBER
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum ProviderSetupStatus {
+  NOT_CONFIGURED
+  CONFIGURED
+  ERROR
+}
+
+enum ConnectionStatus {
+  DISCONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+}
+
+enum RevisionStatus {
+  REQUESTED
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ExecutionJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 model Workspace {
-  id          String    @id
-  name        String
-  description String?
-  projects    Project[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                     String                    @id
+  name                   String
+  description            String?
+  projects               Project[]
+  sessions               WorkspaceSession[]
+  providerConfigs        ExecutionProviderConfig[]
+  integrationConnections IntegrationConnection[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
 }
 
 model Project {
-  id              String            @id
-  workspaceId     String
-  websiteUrl      String
-  name            String
-  websiteSnapshot WebsiteSnapshot?
-  companyProfile  CompanyProfile?
-  tasks           Task[]
-  artifacts       Artifact[]
-  agentRuns       AgentRun[]
-  approvals       Approval[]
-  comments        Comment[]
-  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                     String                    @id
+  workspaceId            String
+  websiteUrl             String
+  name                   String
+  websiteSnapshot        WebsiteSnapshot?
+  companyProfile         CompanyProfile?
+  founderIntake          FounderIntake?
+  tasks                  Task[]
+  artifacts              Artifact[]
+  agentRuns              AgentRun[]
+  approvals              Approval[]
+  comments               Comment[]
+  sessions               WorkspaceSession[]
+  integrationConnections IntegrationConnection[]
+  artifactRevisions      ArtifactRevision[]
+  executionJobs          ExecutionJob[]
+  workspace              Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
 }
 
 model WebsiteSnapshot {
@@ -109,42 +156,46 @@ model CompanyProfile {
 }
 
 model Task {
-  id             String      @id
-  projectId      String
-  title          String
-  description    String
-  type           TaskType
-  source         TaskSource
-  status         TaskStatus
-  impact         Float
-  effort         Float
-  confidence     Float
-  goalFit        Float
-  priorityScore  Float
-  rationale      String
-  dependencies   String?
-  ownerType      OwnerType
+  id                  String         @id
+  projectId           String
+  title               String
+  description         String
+  type                TaskType
+  source              TaskSource
+  status              TaskStatus
+  impact              Float
+  effort              Float
+  confidence          Float
+  goalFit             Float
+  priorityScore       Float
+  priorityContextBoost Float         @default(0)
+  rationale           String
+  dependencies        String?
+  ownerType           OwnerType
   movementLogJson String
-  artifactId     String?     @unique
-  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  artifact       Artifact?   @relation(fields: [artifactId], references: [id])
-  comments       Comment[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  artifactId          String?        @unique
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  artifact            Artifact?      @relation(fields: [artifactId], references: [id])
+  comments            Comment[]
+  executionJobs       ExecutionJob[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 model Artifact {
-  id            String         @id
-  projectId     String
-  type          ArtifactType
-  title         String
-  content       String
-  status        ArtifactStatus
-  task          Task?
-  approvals     Approval[]
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id               String            @id
+  projectId        String
+  type             ArtifactType
+  title            String
+  content          String
+  status           ArtifactStatus
+  task             Task?
+  approvals        Approval[]
+  revisions        ArtifactRevision[]
+  executionJobs    ExecutionJob[]
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model AgentRun {
@@ -161,16 +212,19 @@ model AgentRun {
 }
 
 model Approval {
-  id            String         @id
+  id            String           @id
   projectId     String
   artifactId    String
   status        ApprovalStatus
   requestedBy   String
   decisionNote  String?
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  artifact      Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  decidedBy     String?
+  decidedAt     DateTime?
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  artifact      Artifact         @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  revision      ArtifactRevision?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 model Comment {
@@ -183,4 +237,135 @@ model Comment {
   task          Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model FounderIntake {
+  id                  String             @id
+  projectId           String             @unique
+  founderName         String?
+  founderEmail        String?
+  businessDescription String?
+  currentGoalsJson    String?
+  initiativesJson     String?
+  answersJson         String?
+  planningContext     String?
+  lastSubmittedAt     DateTime?
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sessions            WorkspaceSession[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model WorkspaceSession {
+  id              String        @id
+  workspaceId     String
+  projectId       String?
+  founderIntakeId String?
+  email           String
+  name            String
+  role            SessionRole
+  status          SessionStatus
+  tokenHash       String        @unique
+  lastSeenAt      DateTime?
+  expiresAt       DateTime?
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  founderIntake   FounderIntake? @relation(fields: [founderIntakeId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+model ExecutionProviderConfig {
+  id              String               @id
+  workspaceId     String
+  providerKey     String
+  label           String
+  authType        String
+  status          ProviderSetupStatus
+  baseUrl         String?
+  defaultModel    String?
+  scopesJson      String?
+  configJson      String?
+  lastValidatedAt DateTime?
+  lastError       String?
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executionJobs   ExecutionJob[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([workspaceId, providerKey])
+}
+
+model IntegrationConnection {
+  id                String           @id
+  workspaceId       String
+  projectId         String?
+  providerKey       String
+  label             String
+  authType          String
+  status            ConnectionStatus
+  externalAccountId String?
+  metadataJson      String?
+  syncStateJson     String?
+  lastSyncedAt      DateTime?
+  lastError         String?
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([workspaceId, providerKey])
+}
+
+model ArtifactRevision {
+  id               String          @id
+  projectId        String
+  artifactId       String
+  approvalId       String?         @unique
+  requestedBy      String
+  status           RevisionStatus
+  instruction      String
+  submittedContent String?
+  changeSummary    String?
+  submittedAt      DateTime?
+  resolvedAt       DateTime?
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  artifact         Artifact        @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  approval         Approval?       @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  executionJobs    ExecutionJob[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([projectId, status, createdAt])
+}
+
+model ExecutionJob {
+  id               String               @id
+  projectId        String
+  taskId           String?
+  artifactId       String?
+  revisionId       String?
+  providerConfigId String?
+  runType          String
+  queueName        String
+  status           ExecutionJobStatus
+  dedupeKey        String?
+  inputJson        String?
+  outputJson       String?
+  errorMessage     String?
+  attemptCount     Int                  @default(0)
+  queuedAt         DateTime             @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task             Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  artifact         Artifact?            @relation(fields: [artifactId], references: [id], onDelete: SetNull)
+  revision         ArtifactRevision?    @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  providerConfig   ExecutionProviderConfig? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([projectId, status, queuedAt])
 }

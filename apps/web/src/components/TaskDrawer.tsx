@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Approval, Artifact, Comment, Task } from '../lib/types';
+import type { Approval, Artifact, Comment, ExecutionPreference, ExecutionProvider, Integration, Task } from '../lib/types';
 import { formatDateTime, formatScore, parseRationale } from '../lib/format';
+import { ArtifactViewer } from './ArtifactViewer';
 
 interface TaskDrawerProps {
   approval?: Approval | null;
@@ -10,17 +11,52 @@ interface TaskDrawerProps {
   commentLoading?: boolean;
   comments: Comment[];
   decisionError?: string | null;
+  executionPreference: ExecutionPreference | null;
+  executionProviders: ExecutionProvider[];
   executeLoading?: boolean;
+  activeProviderId: string;
+  integrations: Integration[];
   onAddComment: (taskId: string, body: string) => Promise<boolean>;
   onApprove: (taskId: string) => Promise<boolean>;
   onClose: () => void;
+  onExecutionPreferenceChange: (next: Partial<ExecutionPreference>) => void;
   onExecute: (taskId: string) => Promise<boolean>;
+  onOpenConnections: () => void;
   onReject: (taskId: string, note?: string) => Promise<boolean>;
   rejectLoading?: boolean;
   task: Task | null;
 }
 
 const humanize = (value: string) => value.replaceAll('_', ' ');
+const executableTaskTypes = new Set(['blog_brief', 'x_post_set', 'linkedin_post_set', 'homepage_copy_suggestion', 'email_template']);
+
+const getProviderOptions = (providers: ExecutionProvider[], activeProviderId: string) => {
+  return providers.map((provider) => ({
+    value: provider.id,
+    label: `${provider.name}${provider.id === activeProviderId ? ' (active)' : ''}${provider.status === 'needs_key' ? ' (add key first)' : ''}`,
+    connected: provider.status === 'connected' || provider.status === 'available',
+  }));
+};
+
+const getModeOptions = (task: Task) => {
+  if (task.channel === 'email' || task.channel === 'x' || task.channel === 'linkedin' || task.channel === 'instagram') {
+    return [
+      { value: 'founder_review', label: 'Founder review draft' },
+      { value: 'send_ready', label: 'Send-ready handoff' },
+    ] as const;
+  }
+
+  if (task.category === 'website' || task.category === 'content') {
+    return [
+      { value: 'founder_review', label: 'Founder review draft' },
+      { value: 'implementation_handoff', label: 'Implementation handoff' },
+    ] as const;
+  }
+
+  return [
+    { value: 'founder_review', label: 'Founder review draft' },
+  ] as const;
+};
 
 export function TaskDrawer({
   approval,
@@ -30,11 +66,17 @@ export function TaskDrawer({
   commentLoading,
   comments,
   decisionError,
+  executionPreference,
+  executionProviders,
   executeLoading,
+  activeProviderId,
+  integrations,
   onAddComment,
   onApprove,
   onClose,
+  onExecutionPreferenceChange,
   onExecute,
+  onOpenConnections,
   onReject,
   rejectLoading,
   task,
@@ -52,43 +94,61 @@ export function TaskDrawer({
   const rationale = parseRationale(task.rationale);
   const boardTrail = [...task.movement_history].reverse();
   const approvalPending = approval?.status === 'pending';
-  const canExecute = task.type === 'blog_brief' && !artifact;
+  const canExecute = executableTaskTypes.has(task.type) && (!artifact || artifact.status === 'rejected');
   const decisionBusy = Boolean(executeLoading || approveLoading || rejectLoading);
+  const executionLabel = task.outputLabel ?? humanize(task.type);
+  const channelLabel = task.channel ? humanize(task.channel) : 'internal';
+  const providerOptions = getProviderOptions(executionProviders, activeProviderId);
+  const selectedProvider = executionPreference?.provider ?? activeProviderId;
+  const selectedProviderStatus = providerOptions.find((option) => option.value === selectedProvider)?.connected ?? true;
+  const modeOptions = getModeOptions(task);
+  const selectedMode = executionPreference?.mode ?? 'founder_review';
+  const deliveryConnection = integrations.find((integration) => (
+    (task.channel === 'email' && integration.name === 'Gmail')
+    || (task.channel === 'x' && integration.name === 'X')
+    || (task.channel === 'instagram' && integration.name === 'Instagram')
+    || ((task.category === 'content' || task.category === 'website') && integration.name === 'Google Drive')
+    || (task.category === 'seo' && integration.name === 'Search Console')
+  ));
+  let decisionTitle = `${executionLabel} in progress`;
+  let decisionCopy = 'This task is part of the execution system, but it is not in a generated-asset state yet.';
 
-  const decisionTitle = artifact
-    ? approvalPending
-      ? 'Brief ready for founder review'
-      : artifact.status === 'approved'
-        ? 'Brief approved'
-        : artifact.status === 'rejected'
-          ? 'Brief rejected'
-          : 'Brief generated'
-    : canExecute
-      ? 'Blog brief ready to execute'
-      : 'Task ready for founder review';
-
-  const decisionCopy = artifact
-    ? approvalPending
-      ? 'Review the draft, then approve it or reject it with guidance so the next pass has concrete founder feedback.'
-      : artifact.status === 'approved'
-        ? 'This brief has already been approved and the task can stay marked as complete.'
-        : artifact.status === 'rejected'
-          ? 'This brief was rejected. Keep the artifact visible for reference, and use the note or comments to guide the next revision.'
-          : 'The artifact exists, but there is no pending approval attached to it right now.'
-    : canExecute
-      ? 'This is the only executable task type in v1. Running it will generate a blog brief, create an approval item, and move the task into founder review.'
-      : 'Only blog brief tasks are executable in v1. Other task types can still be prioritized, discussed, and moved across the board, but they are not runnable yet.';
+  if (artifact) {
+    if (approvalPending) {
+      decisionTitle = artifact.deliveryStage === 'ready_to_send'
+        ? `Ready to send on ${channelLabel}`
+        : `${executionLabel} ready for founder review`;
+      decisionCopy = artifact.deliveryStage === 'ready_to_send'
+        ? `Review exactly what Northstar plans to send through ${channelLabel}, then approve it or reject it with clear guidance.`
+        : `Review the ${channelLabel}-aware draft, then approve it or reject it with specific guidance so the next pass has useful founder feedback.`;
+    } else if (artifact.status === 'rejected' && canExecute) {
+      decisionTitle = `Revision requested for ${executionLabel}`;
+      decisionCopy = 'The founder rejected the last draft. Adjust the provider or handoff mode if needed, then generate a tighter revision.';
+    } else if (artifact.status === 'approved') {
+      decisionTitle = `${executionLabel} approved`;
+      decisionCopy = 'This output has already been approved and can remain attached to the completed task.';
+    } else if (artifact.status === 'rejected') {
+      decisionTitle = `${executionLabel} rejected`;
+      decisionCopy = 'This output was rejected. Keep the draft visible for reference and use the note or comments to guide the next revision.';
+    } else {
+      decisionTitle = `${executionLabel} generated`;
+      decisionCopy = 'The output exists, but no pending approval is attached to it right now.';
+    }
+  } else if (canExecute) {
+    decisionTitle = `Generate ${executionLabel}`;
+    decisionCopy = 'Running this will generate a founder-reviewable draft, create an approval item, and move the task into founder review.';
+  }
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="drawer" onClick={(event) => event.stopPropagation()}>
         <header className="drawer-header">
           <div>
-            <p className="eyebrow">Task detail</p>
+            <p className="eyebrow">Northstar task view</p>
             <h2>{task.title}</h2>
           </div>
           <div className="drawer-header-actions">
-            <span className={`pill subtle drawer-pill ${task.status}`}>{humanize(task.status)}</span>
+            <span className={`status-chip ${task.status}`}>{humanize(task.status)}</span>
             <button className="ghost-button" type="button" onClick={onClose}>
               Close
             </button>
@@ -104,8 +164,61 @@ export function TaskDrawer({
               {approval?.note ? <p className="summary-copy decision-note">Latest note: {approval.note}</p> : null}
               {decisionError ? <p className="inline-error">{decisionError}</p> : null}
             </div>
+
             <div className="decision-actions decision-actions-column">
-              {artifact ? <span className={`pill subtle ${artifact.status}`}>{humanize(artifact.status)}</span> : null}
+              {artifact ? <span className={`status-chip ${artifact.status}`}>{humanize(artifact.status)}</span> : null}
+              <div className="decision-config">
+                <label>
+                  Provider
+                  <select
+                    disabled={decisionBusy}
+                    value={selectedProvider}
+                    onChange={(event) => onExecutionPreferenceChange({ provider: event.target.value })}
+                  >
+                    {providerOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Output mode
+                  <select
+                    disabled={decisionBusy}
+                    value={selectedMode}
+                    onChange={(event) => onExecutionPreferenceChange({ mode: event.target.value as ExecutionPreference['mode'] })}
+                  >
+                    {modeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {!selectedProviderStatus ? (
+                <div className="decision-provider-warning">
+                  <p className="summary-copy">
+                    The selected execution provider is not connected yet. Add the provider key or switch back to the active provider before generating the next pass.
+                  </p>
+                  <button className="ghost-button" type="button" onClick={onOpenConnections}>
+                    Open connections
+                  </button>
+                </div>
+              ) : null}
+              {deliveryConnection && deliveryConnection.status !== 'connected' ? (
+                <div className="decision-provider-warning">
+                  <p className="summary-copy">
+                    {deliveryConnection.name} is still disconnected. Northstar can generate the draft now, but the real delivery path stays blocked until that workflow connection is set up.
+                  </p>
+                  <button className="ghost-button" type="button" onClick={onOpenConnections}>
+                    Connect {deliveryConnection.name}
+                  </button>
+                </div>
+              ) : null}
               {canExecute ? (
                 <button
                   className="primary-button secondary"
@@ -115,7 +228,7 @@ export function TaskDrawer({
                     await onExecute(task.id);
                   }}
                 >
-                  {executeLoading ? 'Executing...' : 'Execute brief'}
+                  {executeLoading ? 'Generating...' : artifact?.status === 'rejected' ? 'Generate revision' : `Generate ${executionLabel.toLowerCase()}`}
                 </button>
               ) : null}
               {artifact && approvalPending ? (
@@ -127,7 +240,7 @@ export function TaskDrawer({
                       rows={3}
                       value={rejectionNote}
                       onChange={(event) => setRejectionNote(event.target.value)}
-                      placeholder="Tell the agent what is missing or off before you reject this brief."
+                      placeholder="Tell Northstar what is missing or off before you reject this draft."
                     />
                   </label>
                   <button
@@ -158,40 +271,57 @@ export function TaskDrawer({
             </div>
           </section>
 
-          <p className="summary-copy">{task.description || 'No manual description was added for this task.'}</p>
+          <section className="detail-card detail-card-lead">
+            <p className="eyebrow">Task summary</p>
+            <p>{task.description || 'No manual description was added for this task.'}</p>
+          </section>
 
           <div className="drawer-grid">
             <div><span>Type</span><strong>{humanize(task.type)}</strong></div>
+            <div><span>Category</span><strong>{humanize(task.category)}</strong></div>
+            <div><span>Channel</span><strong>{channelLabel}</strong></div>
+            <div><span>Output</span><strong>{executionLabel}</strong></div>
             <div><span>Source</span><strong>{task.source}</strong></div>
             <div><span>Status</span><strong>{humanize(task.status)}</strong></div>
+            <div><span>Execution</span><strong>{humanize(task.executionStage ?? 'strategy')}</strong></div>
             <div><span>Priority</span><strong>{formatScore(task.priority_score)}</strong></div>
+            <div><span>Operator</span><strong>{task.actor === 'northstar' ? 'Northstar' : 'Founder'}</strong></div>
+            <div><span>Needs founder</span><strong>{task.needsFounderAction ? 'Yes' : 'No'}</strong></div>
           </div>
 
-          <section className="score-card">
-            <div className="drawer-grid muted-grid">
-              <div><span>Impact</span><strong>{task.impact}</strong></div>
-              <div><span>Effort</span><strong>{task.effort}</strong></div>
-              <div><span>Confidence</span><strong>{task.confidence}</strong></div>
-              <div><span>Goal fit</span><strong>{task.goal_fit}</strong></div>
+          <div className="drawer-grid muted-grid">
+            <div><span>Impact</span><strong>{task.impact}</strong></div>
+            <div><span>Effort</span><strong>{task.effort}</strong></div>
+            <div><span>Confidence</span><strong>{task.confidence}</strong></div>
+            <div><span>Goal fit</span><strong>{task.goal_fit}</strong></div>
+          </div>
+
+          <p className="score-formula">Priority score = impact x confidence x goal fit / effort</p>
+
+          <div className="detail-story-grid">
+            <section className="detail-card">
+              <p className="eyebrow">Why this exists</p>
+              <p>{rationale.whyExists || task.rationale}</p>
+            </section>
+            <section className="detail-card">
+              <p className="eyebrow">Why this priority</p>
+              <p>{rationale.whyPriority || 'Priority comes from the current score and where this task sits in the board right now.'}</p>
+            </section>
+            <section className="detail-card">
+              <p className="eyebrow">Business outcome</p>
+              <p>{rationale.businessOutcome || 'This task should improve a concrete acquisition, conversion, or positioning outcome for the company.'}</p>
+            </section>
+          </div>
+
+          <ArtifactViewer artifact={artifact ?? null} embedded />
+
+          <section className="detail-card">
+            <div className="detail-card-head">
+              <div>
+                <p className="eyebrow">Board trail</p>
+                <h3>How this task moved</h3>
+              </div>
             </div>
-            <p className="score-formula">Priority score = impact x confidence x goal fit / effort</p>
-          </section>
-
-          <section>
-            <h3>Why this exists</h3>
-            <p>{rationale.whyExists || task.rationale}</p>
-          </section>
-          <section>
-            <h3>Why this priority</h3>
-            <p>{rationale.whyPriority || 'Priority comes from the current score and where this task sits in the board right now.'}</p>
-          </section>
-          <section>
-            <h3>Business outcome</h3>
-            <p>{rationale.businessOutcome || 'This task should improve a concrete acquisition, conversion, or positioning outcome for the company.'}</p>
-          </section>
-
-          <section>
-            <h3>Board trail</h3>
             <div className="history-list">
               {boardTrail.map((movement, index) => (
                 <article key={`${movement.at}-${index}`} className="history-item">
@@ -203,20 +333,23 @@ export function TaskDrawer({
             </div>
           </section>
 
-          <section>
-            <h3>Dependencies</h3>
-            <p>{task.dependencies.length ? task.dependencies.join(', ') : 'None'}</p>
-          </section>
-          <section>
-            <h3>Timeline</h3>
-            <p>Created {formatDateTime(task.created_at)}</p>
-            <p>Updated {formatDateTime(task.updated_at)}</p>
-          </section>
-          <section>
-            <div className="section-heading comment-heading">
+          <div className="detail-story-grid">
+            <section className="detail-card">
+              <p className="eyebrow">Dependencies</p>
+              <p>{task.dependencies.length ? task.dependencies.join(', ') : 'None'}</p>
+            </section>
+            <section className="detail-card">
+              <p className="eyebrow">Timeline</p>
+              <p>Created {formatDateTime(task.created_at)}</p>
+              <p>Updated {formatDateTime(task.updated_at)}</p>
+            </section>
+          </div>
+
+          <section className="detail-card">
+            <div className="detail-card-head">
               <div>
-                <h3>Comments</h3>
-                <p className="summary-copy">Use comments for founder feedback that should persist with the task.</p>
+                <p className="eyebrow">Founder comments</p>
+                <h3>Persistent task context</h3>
               </div>
             </div>
             <form
@@ -248,6 +381,7 @@ export function TaskDrawer({
                 </button>
               </div>
             </form>
+
             <div className="comment-stack">
               {comments.length ? comments.map((comment) => (
                 <article key={comment.id} className="comment-card">

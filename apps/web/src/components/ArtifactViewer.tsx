@@ -3,36 +3,74 @@ import { formatDateTime } from '../lib/format';
 
 interface ArtifactViewerProps {
   artifact: Artifact | null;
+  embedded?: boolean;
 }
+
+const isStandaloneHeading = (line: string, nextLine?: string) => {
+  if (!nextLine) {
+    return false;
+  }
+
+  if (!line.trim() || line.startsWith('- ') || /^\d+\.\s/.test(line)) {
+    return false;
+  }
+
+  if (line.startsWith('#')) {
+    return true;
+  }
+
+  return line.length <= 36 && !/[.!?:]$/.test(line);
+};
 
 const parseArtifact = (content: string) => {
   const lines = content.split('\n');
-  const title = lines.find((line) => line.startsWith('# '))?.replace(/^#\s+/, '') ?? 'Generated artifact';
   const sections: Array<{ heading: string; lines: string[] }> = [];
+  let title = 'Generated artifact';
   let current: { heading: string; lines: string[] } | null = null;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trimEnd();
+    const nextLine = lines[index + 1]?.trim();
+
     if (!line) {
-      if (current) current.lines.push('');
+      if (current && current.lines[current.lines.length - 1] !== '') {
+        current.lines.push('');
+      }
       continue;
     }
 
-    if (line.startsWith('# ')) continue;
+    if (line.startsWith('# ')) {
+      title = line.replace(/^#\s+/, '');
+      continue;
+    }
 
     if (line.startsWith('## ')) {
-      if (current) sections.push(current);
+      if (current) {
+        sections.push(current);
+      }
       current = { heading: line.replace(/^##\s+/, ''), lines: [] };
+      continue;
+    }
+
+    if (isStandaloneHeading(line, nextLine)) {
+      if (current) {
+        sections.push(current);
+      }
+      current = { heading: line.replace(/^#+\s*/, ''), lines: [] };
       continue;
     }
 
     if (!current) {
       current = { heading: 'Notes', lines: [] };
     }
+
     current.lines.push(line);
   }
 
-  if (current) sections.push(current);
+  if (current) {
+    sections.push(current);
+  }
+
   return { title, sections };
 };
 
@@ -70,13 +108,17 @@ const renderSectionLines = (lines: string[]) => {
   );
 };
 
-export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
+export function ArtifactViewer({ artifact, embedded }: ArtifactViewerProps) {
   if (!artifact) {
+    if (embedded) {
+      return null;
+    }
+
     return (
-      <section className="panel artifact-panel">
-        <p className="eyebrow">Artifact viewer</p>
-        <h2>Generated blog brief</h2>
-        <p>Select a brief from the board to review the draft and decide whether it is strong enough to approve.</p>
+      <section className="rail-card artifact-panel">
+        <p className="eyebrow">Artifact review</p>
+        <h2>No generated artifact selected</h2>
+        <p className="panel-copy">Open a task with a draft artifact to review the output in context.</p>
       </section>
     );
   }
@@ -84,21 +126,27 @@ export function ArtifactViewer({ artifact }: ArtifactViewerProps) {
   const parsed = parseArtifact(artifact.content);
 
   return (
-    <section className="panel artifact-panel">
+    <section className={`${embedded ? 'detail-card embedded-artifact-panel' : 'rail-card artifact-panel'}`}>
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Artifact viewer</p>
+          <p className="eyebrow">Artifact review</p>
           <h2>{artifact.title}</h2>
         </div>
-        <span className={`pill subtle ${artifact.status}`}>{artifact.status.replace('_', ' ')}</span>
+        <div className="artifact-meta-chips">
+          {artifact.channel ? <span className="domain-badge">{artifact.channel}</span> : null}
+          <span className="domain-badge">{artifact.type.replaceAll('_', ' ')}</span>
+          <span className={`status-chip ${artifact.status}`}>{artifact.status.replace('_', ' ')}</span>
+        </div>
       </div>
+
       <div className="artifact-hero">
         <div>
-          <span className="eyebrow">Founder review</span>
+          <span className="artifact-label">{artifact.deliveryStage.replaceAll('_', ' ')}</span>
           <h3>{parsed.title}</h3>
         </div>
         <p className="artifact-timestamp">Created {formatDateTime(artifact.createdAt)}</p>
       </div>
+
       <div className="artifact-sections">
         {parsed.sections.map((section) => (
           <article key={section.heading} className="artifact-section">

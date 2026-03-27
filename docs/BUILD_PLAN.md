@@ -1,217 +1,114 @@
 # Northstar Build Plan
 
-This is the pragmatic end-to-end build plan for taking Northstar from the current v1 demo to a production-ready founder operating system.
+Status date: March 27, 2026
 
-## Working definition of "e2e"
+This plan now tracks reality, not an earlier future-phase wishlist.
 
-For this project, end to end means:
+## Launch assumptions
 
-1. a founder can create a workspace and connect a website
-2. the platform can analyze the website and generate a useful operating backlog
-3. the Kanban board is the primary control surface
-4. the system can generate and route founder-facing artifacts for approval
-5. the platform supports persistent projects, auth, and basic team-safe behavior
-6. the app can be deployed and demoed reliably
+- target launch is an early founder pilot with strong demo readiness
+- the board stays the main product surface
+- Northstar remains single-founder-first for this launch
+- founder approval is required before any publish/send/finalize step
+- WhatsApp/Telegram, autonomous delivery, and team collaboration stay out of scope
 
-## Timeline
+## Wave status
 
-### Phase 1: Stabilize v1 demo
-Estimated: 4 to 6 days
+### Wave 1: audit calibration
 
-Goals:
-- clean up the current v1 flow
-- remove weak demo edges
-- make onboarding, scoring, and approval feel dependable
-- tighten copy and seeded demo output
+Status: implemented
 
-Deliverables:
-- stronger onboarding summaries
-- more specific task generation
-- better board defaults and safer scoring
-- cleaner README and demo steps
-- bug pass across API and UI
+Shipped:
 
-### Phase 2: Productize the core workflow
-Estimated: 7 to 10 days
+- Northstar self-dogfood now resolves to the founder-OS thesis instead of repo-first QA language
+- pilot audits are in place for Northstar, Moongate, Gridlock, and Nightwatch QA
+- task rationale structure is explicit and usable in demos
 
-Goals:
-- make the current workflow multi-project and persistent in a more realistic way
-- stop treating each onboarding run as a brand new world
-- add clearer state management and board-level actions
+Still weak:
 
-Deliverables:
-- workspace/project reuse on re-onboarding
-- saved board filters and stable task ordering
-- better task history and comments persistence
-- clearer board actions and founder controls
+- site understanding is still heuristic and README-sensitive
+- category language can still drift if the source website is thin or noisy
 
-### Phase 3: Make execution believable
-Estimated: 10 to 14 days
+### Wave 2: founder-OS shell
 
-Goals:
-- upgrade from mocked internals toward reliable execution while keeping scope tight
-- improve artifact generation quality
-- add structured approval and rerun behavior
+Status: implemented for dogfood and pilot demos
 
-Deliverables:
-- provider-backed artifact generation for blog briefs
-- retry and revision flows
-- better prompt and artifact templates
-- queue-friendly execution layer for long-running work
+Shipped:
 
-### Phase 4: Platform hardening
-Estimated: 7 to 10 days
+- staged onboarding with founder follow-up questions
+- onboarding draft persistence and dashboard re-entry
+- left navigation, compact top bar, and board / Northstar / founder / approvals surfaces
+- command-center overview, basic matrix, manual task intake, comments, and movement history
 
-Goals:
-- make the app safe to run with real users
-- add basic production expectations without overbuilding
+Still weak:
 
-Deliverables:
-- simple auth
-- per-workspace/project isolation
-- deployment config
-- environment handling
-- logging and minimal observability
-- error boundaries and API failure handling
+- auth is still a lightweight local session foundation
+- project reuse is not yet a real account-aware onboarding flow
 
-### Phase 5: Launch-ready pass
-Estimated: 5 to 7 days
+### Wave 3: platform foundation
 
-Goals:
-- make the demo investor/customer ready
-- close the highest-risk UX and reliability gaps
+Status: materially implemented, but still demo-grade in execution
 
-Deliverables:
-- seeded demo workspace improvements
-- visual polish pass
-- QA checklist
-- deployment runbook
-- founder demo script
+Shipped:
 
-## Total estimate
+- Postgres Prisma schema plus checked-in migrations
+- persisted founder intake and planning context
+- workspace session records
+- persisted provider configs and integration connection records
+- approval decisions, revision records, and execution-job records
+- live API-backed flows for onboarding, task updates, approvals, revisions, providers, and integrations
 
-- Fast path: 5 to 7 weeks
-- Safer path: 6 to 8 weeks
+Remaining:
 
-That assumes we keep scope disciplined and do not add full social publishing, full adapters, or broad multi-agent execution during this pass.
+- replace local session auth with real Google/email auth
+- validate external credentials against real providers
+- add a separate worker/retry layer for queued execution jobs
+- move from mock execution to provider-backed execution for supported artifact types
 
-## Non-goals for this buildout
+### Wave 4: CRM and research expansion
 
-- paid ads features
-- full WhatsApp/Telegram integrations right away
-- enterprise auth and permissions
-- autonomous publishing in early phases
-- broad multi-channel campaign automation before the board workflow is solid
+Status: shell implemented, workflow still mostly mocked
 
-## What I need from you
+Shipped:
 
-### Must-have decisions
-- the single ideal customer profile for the first launch
-- the one artifact type after blog brief that should matter most
-- whether the first real user is you only or a small set of external testers
-- whether this should stay single-founder-first or support lightweight team collaboration in the next phase
+- CRM and research sections in the command center
+- CRM/research task categories and execution framing
+- seeded CRM contacts and research notes for demo walkthroughs
 
-### Brand/product inputs
-- final product name confirmation: `Northstar`
-- product positioning sentence
-- 2 to 3 examples of output quality you consider "great"
+Remaining:
 
-### Pilot calibration set
-- `Moongate` - Solana wallet adapter
-  - website: `https://www.moongate.one/`
-- `Gridlock` - F1 betting league
-  - website: `https://joingridlock.com/`
-  - repo: `https://github.com/ps2802/F1-predictive-game`
-- `Nightwatch QA` - agentic QA platform
-  - repo: `https://github.com/ps2802/nightwatch-qa`
-- Northstar dogfood workspace
-  - repo: `https://github.com/ps2802/Northstar`
+- persist CRM contacts and research notes in live product flows
+- support real outreach/research drafts with send-ready state tied to actual integrations
+- add response tracking and follow-up loops
 
-These projects should be the primary calibration set for onboarding quality, ICP inference, task specificity, and board trust before wider coworking-space demos.
+### Wave 5: hardening and launch pass
 
-See [`docs/NORTHSTAR_DOGFOOD.md`](./NORTHSTAR_DOGFOOD.md) for the Northstar-on-Northstar findings and the smallest fixes to prioritize.
+Status: partially implemented
 
-### Delivery inputs
-- preferred deployment target: Vercel, Render, Railway, Fly, or other
-- preferred model/provider for artifact generation once we move beyond mocks
-- whether you want me to optimize first for investor demos or early customer pilots
+Shipped:
 
-Current recommendation:
-- optimize for `early founder pilot with strong demo readiness`
-- validate Northstar first on `Moongate`, `Gridlock`, `Nightwatch QA`, and `Northstar` itself
-- keep the Vercel path Postgres-first and deployable for real demo environments
+- Vercel deployment path with hosted Postgres
+- deploy and demo runbooks
+- end-to-end validation for onboarding, manual task creation, asset generation, approval rejection, and comment persistence
 
-## Current calibration findings
+Remaining:
 
-The current calibration set has produced a clear controller-level priority order.
+- real workspace ownership and secure isolation through auth
+- observability, failure recovery, and operator-facing job debugging
+- final pilot QA across Northstar, Moongate, Gridlock, and Nightwatch QA on deployed infrastructure
 
-### What is working
+## Current priority order
 
-- `Moongate` now reads as a crypto-native Solana product rather than generic B2B software.
-- `Gridlock` now reads as a consumer F1 prediction product with event-driven growth opportunities.
-- `Nightwatch QA` now reads as a repo-first technical B2B product instead of generic SaaS.
-- Task rationale structure is directionally strong across pilots:
-  - why the task exists
-  - why it has its priority
-  - what outcome it supports
+1. Keep Northstar-on-Northstar as the release gate for company understanding and task quality.
+2. Replace mock execution for the current supported asset set with a real provider path.
+3. Replace the local session/auth foundation with real Google or email auth.
+4. Decide whether CRM/research needs live persistence for the first pilot or should stay demo-only.
+5. Run the deployment + QA pass on hosted Postgres before any external pilot.
 
-### Current quality gate
+## Launch exit criteria
 
-- `Northstar` dogfooding is still the hardest and most important calibration test.
-- Northstar now correctly reads Northstar itself as a founder operating system instead of a QA product.
-- That means repo-first identity extraction has been corrected for the current dogfood path, but it still needs ongoing validation as the product evolves.
-- Product principle:
-  - If Northstar cannot create useful growth work for Northstar itself, the feature is not ready.
-
-### Top fixes before live demos
-
-1. Keep the founder-OS thesis prominent in repo-first summaries so it does not drift back toward workflow language.
-2. Keep company summaries grounded in the actual buyer-facing promise before deriving ICP.
-3. Tighten task-template selection so repo-first products do not fall back to generic B2B patterns.
-4. Make social and competitor-style tasks more concrete about business outcome.
-5. Keep tone adaptation strong across:
-   - crypto-native products
-   - technical B2B products
-   - consumer/event-driven products
-
-### Calibration references
-
-- [`docs/audits/NORTHSTAR_SELF_AUDIT.md`](./audits/NORTHSTAR_SELF_AUDIT.md)
-- [`docs/audits/MOONGATE_CALIBRATION.md`](./audits/MOONGATE_CALIBRATION.md)
-- [`docs/audits/GRIDLOCK_CALIBRATION.md`](./audits/GRIDLOCK_CALIBRATION.md)
-- [`docs/audits/NIGHTWATCH_QA_CALIBRATION.md`](./audits/NIGHTWATCH_QA_CALIBRATION.md)
-
-## Current execution mode
-
-- Build continuously in bounded chunks unless a real blocker appears.
-- Prioritize demo quality and real usability over feature count.
-- Keep the board as the core product surface.
-- Current priority order:
-  1. make the Northstar-on-Northstar demo excellent
-  2. harden output quality
-  3. prepare for Vercel deployment with hosted Postgres
-  4. improve artifact usefulness beyond mocked execution
-
-## Recommended working mode
-
-- we keep one repo-level Kanban updated in `docs/TASK_BOARD.md`
-- we work in tight milestones
-- after each milestone I summarize:
-  - what changed
-  - what works
-  - what is still stubbed
-  - what you should test next
-
-## Deployment status
-
-- Northstar now has a Postgres-first Prisma schema for real deployments.
-- Checked-in Prisma migrations are in `prisma/migrations`.
-- The Vercel build runs migrations, generates Prisma client, and builds both apps.
-- Supabase-backed local migration and seed now complete successfully against a real hosted Postgres database.
-- PRD v1 workflow validation now covers:
-  - manual task creation with optional description
-  - command-center `blog_brief` execution
-  - approval reject path with revision notes
-  - persisted task comments
-- Exact deployment steps are documented in [`docs/DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md).
-- Remaining weakness: the app is deployable for live demos, but artifact execution is still mocked and there is no background job layer yet.
+- Northstar still identifies itself as a founder operating system after repo and README changes
+- supported artifact types generate through a real provider path
+- approvals, revisions, comments, and task transitions work on deployed infrastructure
+- auth and workspace ownership are real enough to protect pilot data
+- docs, task board, and demo runbook all describe the same product truth
