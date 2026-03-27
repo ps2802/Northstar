@@ -1,97 +1,50 @@
 # Northstar Task Board
 
-This is the active build board for the project.
+Status date: March 27, 2026
 
-## Backlog
+## Current truth
 
-- Define launch ICP and sharpen product positioning
-- Improve seeded demo data and homepage/demo copy
-- Rework onboarding to reuse an existing project instead of always creating a new workspace
-- Add persistent comments and richer task history in the UI
-- Add better board ordering and explicit board-level filters
-- Replace mocked blog-brief execution with provider-backed generation
-- Add revision loop for rejected artifacts
-- Add queueing for long-running agent execution
-- Add basic auth and workspace isolation
-- Prepare production deployment config and runbook
-
-## Next Up
-
-- Tighten the generated Northstar brief further so the opening goal line reads less machine-shaped
-- Push the latest hardening commits to GitHub
-- Verify the hosted Postgres-backed Vercel deployment path end to end
-- Add project reuse on re-onboarding
-- Add stronger empty states in the web app
-
-## In Progress
-
-- Gridlock preparation as the secondary live demo case
-- Hosted Postgres deployment hardening for Vercel demo environments
-
-## Blocked
-
-- Final launch ICP is not confirmed yet
-- Real artifact generation provider is not chosen yet
-- Northstar self-dogfood identity is now corrected, and the Vercel path is ready for documentation-only readiness work
+- Wave 1 and Wave 2 are no longer backlog items. Audit calibration and the founder-OS shell are implemented enough for dogfood and pilot demos.
+- Wave 3 is partly real: persistence, approvals, revisions, providers, integrations, and execution-job records are shipped, but execution is still mock-driven.
+- Wave 4 is partly real: CRM and research exist as product surfaces and seeded demo flows, not as live end-to-end systems.
+- Wave 5 is partly real: deployment path and runbooks exist, but real auth, secure ownership, and production-grade execution reliability are still open.
 
 ## Done
 
-- Monorepo scaffolded
-- Shared schema and types created
-- Website onboarding flow built
-- Site ingestion stub built
-- Company summary flow built
-- Task generation and Kanban UI built
-- Manual task creation, scoring, and reprioritization built
-- Blog brief generation and approval flow built
-- Milestones 1 to 5 polished and validated
-- Repo pushed to GitHub at `ps2802/Northstar`
-- Initial pilot calibration set identified:
-  - `Moongate`
-  - `Gridlock`
-  - `Nightwatch QA`
-- `Northstar` added as an official dogfood workspace
-- Pilot calibration audits completed for:
-  - `Moongate`
-  - `Gridlock`
-  - `Nightwatch QA`
-  - `Northstar`
-- Northstar dogfood findings documented in `docs/NORTHSTAR_DOGFOOD.md`
-- Controller/subagent repo rule added in `AGENTS.md`
-- Public naming standardized around `Northstar`
-- Northstar homepage task wording hardened for the demo
-- Northstar blog brief quality hardened for the demo
-- Northstar demo runbook added in `docs/DEMO_RUNBOOK.md`
-- Northstar task drawer UX hardened with board trail and clearer decision surface
-- Northstar artifact review UX hardened for founder approval clarity
-- Fallback board state now preserves task movement history
-- Vercel deployment path now targets hosted Postgres with checked-in Prisma migrations
-- Vercel deployment runbook added in `docs/DEPLOY_VERCEL.md`
-- PRD v1 workflow gaps closed:
-  - command-center blog brief execution
-  - reject with revision notes
-  - persisted task comments
-  - action-specific error/loading states
-  - optional manual-task descriptions
-- Supabase-backed Prisma migration and seed validated end to end
-- Live API flow validated for:
-  - onboarding
-  - manual task creation
-  - blog brief execution
-  - rejection with comment persistence
+- Northstar self-audit corrected the product thesis from QA drift to founder-OS positioning
+- pilot calibration audits completed for Northstar, Moongate, Gridlock, and Nightwatch QA
+- staged onboarding, founder follow-up capture, dashboard re-entry, and board-first shell shipped
+- task rationale, comments, movement history, approvals, rejection notes, and revision queue shipped
+- provider setup, integration setup, and persisted workspace configuration shipped
+- Postgres Prisma schema, checked-in migrations, Vercel deploy path, and runbooks shipped
+- live API validation completed for onboarding, manual task creation, v1 asset generation, approvals, and comments
 
-## Calibration notes
+## Active priorities
 
-- `Moongate`
-  - Stronger crypto-native understanding
-  - Still needs a clearer split between trader growth and integration-led messaging
-- `Gridlock`
-  - Stronger consumer/F1 framing
-  - Still needs more explicit activation vs retention outcomes in task wording
-- `Nightwatch QA`
-  - Stronger repo-first technical B2B framing
-  - Still needs less generic social-task wording
-- `Northstar`
-  - Strongest quality gate and current miss
-  - Now correctly reads as a founder operating system
-  - Still needs final demo polish and ongoing validation as the product evolves
+- replace `MockFounderExecutor` with a real provider-backed path for supported v1 asset types
+- replace the local session foundation with real Google/email auth
+- validate provider/integration credentials against real downstream systems
+- decide whether CRM and research need live persistence for the first external pilot
+- run the full deployed QA pass on hosted Postgres using Northstar as the first workspace
+
+## Remaining or mocked
+
+- execution still uses mocked generation logic
+- unsupported task types still block instead of executing
+- integrations mostly persist state without real delivery or syncing depth
+- CRM contacts and research notes are still seeded/demo data in the web app
+- no worker/retry daemon yet for queued execution jobs
+- no team collaboration layer yet
+
+## Decisions still needed
+
+- which generation provider is the default live path
+- which auth path ships first: Google or email magic link
+- whether first pilot scope includes live CRM/research records or keeps those surfaces demo-only
+
+## Test next
+
+- Northstar-on-Northstar after any README or positioning changes
+- provider-backed generation, approval, rejection, and revision resubmission on deployed infrastructure
+- hosted Postgres deploy + migrate + seed + dashboard re-entry flow
+- provider/integration connect, disconnect, and sync behavior with real credentials

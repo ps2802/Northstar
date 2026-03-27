@@ -11,6 +11,7 @@
     "dev:api": "npm run dev --workspace @founder-os/api",
     "dev:web": "npm run dev --workspace @founder-os/web",
     "build": "npm run build --workspaces",
+    "smoke:web": "node apps/web/scripts/smoke.mjs",
     "vercel:build": "npx prisma generate --schema=./prisma/schema.prisma && npm run build",
     "db:generate": "prisma generate --schema=./prisma/schema.prisma",
     "db:push": "prisma db push --schema=./prisma/schema.prisma",

@@ -2,6 +2,12 @@ import { prisma } from "../apps/api/src/lib/prisma.js";
 import { onboardProject } from "../apps/api/src/services/dashboard.js";
 
 const main = async () => {
+  await prisma.executionJob.deleteMany();
+  await prisma.artifactRevision.deleteMany();
+  await prisma.integrationConnection.deleteMany();
+  await prisma.executionProviderConfig.deleteMany();
+  await prisma.workspaceSession.deleteMany();
+  await prisma.founderIntake.deleteMany();
   await prisma.approval.deleteMany();
   await prisma.agentRun.deleteMany();
   await prisma.comment.deleteMany();

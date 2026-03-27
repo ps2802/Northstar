@@ -6,7 +6,15 @@ export interface PlannerContract {
 }
 
 export interface ExecutorContract {
-  run(task: Task, companySummary: string, guessedIcp: string): { nextTask: Task; artifact?: Artifact };
+  run(
+    task: Task,
+    companySummary: string,
+    guessedIcp: string,
+    options?: {
+      providerLabel?: string;
+      revisionNote?: string;
+    }
+  ): { nextTask: Task; artifact?: Artifact };
 }
 
 export class FounderPlanner implements PlannerContract {
@@ -61,7 +69,7 @@ const buildFounderOsBrief = (task: Task, companySummary: string, guessedIcp: str
   ].join("\n");
 };
 
-const buildGenericBrief = (task: Task, companySummary: string, guessedIcp: string) => {
+const buildGenericBrief = (task: Task, companySummary: string, guessedIcp: string, revisionNote?: string) => {
   return [
     `# ${task.title}`,
     "",
@@ -94,6 +102,12 @@ const buildGenericBrief = (task: Task, companySummary: string, guessedIcp: strin
     "- Use concrete language over buzzwords.",
     "- Make the argument feel founder-usable, not SEO-only.",
     "",
+    ...(revisionNote ? [
+      "## Revision Guidance",
+      revisionNote,
+      "",
+    ] : []),
+    "",
     "## SEO Notes",
     "- Include one primary keyword and two supporting variations.",
     "- Keep the title specific and outcome-oriented.",
@@ -101,30 +115,121 @@ const buildGenericBrief = (task: Task, companySummary: string, guessedIcp: strin
   ].join("\n");
 };
 
-const buildBlogBrief = (task: Task, companySummary: string, guessedIcp: string): string => {
+const buildBlogBrief = (task: Task, companySummary: string, guessedIcp: string, revisionNote?: string): string => {
   const lower = `${task.title} ${companySummary} ${guessedIcp}`.toLowerCase();
   if (lower.includes("non-technical founder") || lower.includes("board, not another chat thread") || lower.includes("kanban-first operating system")) {
     return buildFounderOsBrief(task, companySummary, guessedIcp);
   }
 
-  return buildGenericBrief(task, companySummary, guessedIcp);
+  return buildGenericBrief(task, companySummary, guessedIcp, revisionNote);
+};
+
+const buildSocialPostSet = (task: Task, companySummary: string, guessedIcp: string): string => {
+  const channel = task.type === "LINKEDIN_POST_SET" ? "LinkedIn" : "X";
+  return [
+    `# ${task.title}`,
+    "",
+    "## Channel",
+    channel,
+    "",
+    "## Company Context",
+    companySummary,
+    "",
+    "## Audience",
+    guessedIcp,
+    "",
+    "## Core Angle",
+    "Turn the company's current point of view into channel-native founder language that feels specific, useful, and sharp.",
+    "",
+    "## Post 1",
+    "Name the painful before-state and why generic growth advice usually fails.",
+    "",
+    "## Post 2",
+    "Explain the clearer operating model the company believes in, with one concrete example.",
+    "",
+    "## Post 3",
+    "Close with a founder-level takeaway and a light CTA for replies or conversation.",
+    "",
+    "## Variants",
+    "- One shorter version for faster scanning.",
+    "- One more opinionated version with a stronger point of view.",
+    "",
+    "## Tone Guardrails",
+    "- Sound founder-aware, not AI-generic.",
+    "- Keep the copy tight and reuse company language where it matters.",
+    "- Avoid generic social filler or empty inspiration.",
+  ].join("\n");
+};
+
+const buildWebsiteCopySuggestions = (task: Task, companySummary: string, guessedIcp: string): string => {
+  return [
+    `# ${task.title}`,
+    "",
+    "## Goal",
+    `Create founder-facing website copy suggestions for ${guessedIcp} that make the company's value clearer in the first few seconds.`,
+    "",
+    "## Company Context",
+    companySummary,
+    "",
+    "## Suggested Hero",
+    "A sharper headline that names the founder problem, the operating change, and the practical payoff.",
+    "",
+    "## Supporting Copy",
+    "- Clarify who the company is for.",
+    "- Translate the offer into visible business outcomes.",
+    "- Remove vague language that forces the founder to explain the product manually.",
+    "",
+    "## CTA Direction",
+    "Use one primary CTA tied to the next meaningful founder action.",
+    "",
+    "## Proof Guidance",
+    "- Add one proof or evidence block near the hero.",
+    "- Keep the copy specific and operational.",
+    "",
+    "## Tone Guardrails",
+    "- Direct, specific, and founder-usable.",
+    "- Avoid agency-style filler.",
+    "- Make the copy feel ready to review, edit, and ship.",
+  ].join("\n");
 };
 
 export class MockFounderExecutor implements ExecutorContract {
-  run(task: Task, companySummary: string, guessedIcp: string) {
-    if (task.type !== "BLOG_BRIEF") {
+  run(task: Task, companySummary: string, guessedIcp: string, options?: { providerLabel?: string; revisionNote?: string }) {
+    let content: string | null = null;
+    let titleSuffix = "Draft";
+    let successSummary = "Generated asset and routed it into the approval queue.";
+    const providerLabel = options?.providerLabel ?? "Northstar CLI";
+
+    if (task.type === "BLOG_BRIEF") {
+      content = buildBlogBrief(task, companySummary, guessedIcp, options?.revisionNote);
+      titleSuffix = "Brief";
+      successSummary = "Generated blog brief and routed it into the approval queue.";
+    } else if (task.type === "LINKEDIN_POST_SET" || task.type === "X_POST_SET") {
+      content = buildSocialPostSet(task, companySummary, guessedIcp);
+      titleSuffix = "Post Set";
+      successSummary = "Generated social post set and routed it into the approval queue.";
+    } else if (task.type === "HOMEPAGE_COPY_SUGGESTION") {
+      content = buildWebsiteCopySuggestions(task, companySummary, guessedIcp);
+      titleSuffix = "Copy Draft";
+      successSummary = "Generated founder-facing copy suggestions and routed them into the approval queue.";
+    }
+
+    if (!content) {
       return {
-        nextTask: transitionTask(task, "BLOCKED", "v1 execution only supports blog brief generation.")
+        nextTask: transitionTask(task, "BLOCKED", "v1 execution only supports blog briefs, social post sets, and founder-facing copy suggestions.")
       };
     }
 
-    const content = buildBlogBrief(task, companySummary, guessedIcp);
     const artifact: Artifact = {
       id: `${task.id}-artifact`,
       project_id: task.project_id,
       type: "BLOG_BRIEF",
-      title: `${task.title} - Brief`,
-      content,
+      title: `${task.title} - ${titleSuffix}`,
+      content: [
+        `> Generated via ${providerLabel}`,
+        "",
+        content,
+      ].join("\n"),
       status: "WAITING_FOR_APPROVAL",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -132,7 +237,7 @@ export class MockFounderExecutor implements ExecutorContract {
 
     return {
       nextTask: {
-        ...transitionTask(task, "WAITING_FOR_APPROVAL", "Generated blog brief and routed it into the approval queue."),
+        ...transitionTask(task, "WAITING_FOR_APPROVAL", successSummary),
         artifact_id: artifact.id
       },
       artifact
