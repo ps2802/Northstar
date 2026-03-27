@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFounderApi } from '../lib/api';
 import { formatDateTime, formatDomain } from '../lib/format';
-import { demoState } from '../lib/mockData';
+import { demoState, redesignBuildPlan } from '../lib/mockData';
 import type {
   AppState,
   Approval,
@@ -15,6 +15,7 @@ import type {
 import type { NewTaskInput, TaskStatus } from '../lib/types';
 import { AddTaskForm } from './AddTaskForm';
 import { ApprovalQueue } from './ApprovalQueue';
+import { BuildDashboard } from './BuildDashboard';
 import { CompanySummary } from './CompanySummary';
 import { ConnectionsPanel } from './ConnectionsPanel';
 import { KanbanBoard } from './KanbanBoard';
@@ -52,9 +53,9 @@ const surfaceOptions: Array<{ key: DashboardSurface; label: string }> = [
 
 const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; copy: string }> = {
   command_center: {
-    eyebrow: 'Command Center',
-    title: 'Northstar runs the operating system, not a chat stream.',
-    copy: 'See the company readout, priority matrix, live board, and the split between agent execution and founder-required work.',
+    eyebrow: 'Dashboard',
+    title: 'Track what is being built and what moves next.',
+    copy: 'Use this view to see the current implementation pass, the live board underneath it, and the founder queue that still needs decisions.',
   },
   board: {
     eyebrow: 'Board',
@@ -1060,6 +1061,7 @@ export function CommandCenter() {
     if (activeSection === 'command_center') {
       return (
         <div className="workspace-page">
+          <BuildDashboard phases={redesignBuildPlan} />
           <OverviewPanels approvals={state.approvals} founderIntake={founderIntake} tasks={sortedTasks} />
 
           <div className="dashboard-shell">

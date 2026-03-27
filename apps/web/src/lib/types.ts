@@ -23,6 +23,8 @@ export type DashboardSection =
   | 'connections'
   | 'settings';
 
+export type BuildTaskStatus = 'in_progress' | 'next' | 'planned' | 'blocked' | 'done';
+
 export type DashboardSurface = 'kanban' | 'northstar' | 'founder' | 'approvals';
 
 export type TaskType =
@@ -246,6 +248,23 @@ export interface Initiative {
   status: 'active' | 'planned' | 'complete';
   summary: string;
   linkedTaskIds: string[];
+}
+
+export interface BuildTask {
+  id: string;
+  title: string;
+  status: BuildTaskStatus;
+  owner: 'codex' | 'founder';
+  summary: string;
+  nextStep: string;
+}
+
+export interface BuildPhase {
+  id: string;
+  title: string;
+  status: 'active' | 'up_next' | 'queued' | 'done';
+  goal: string;
+  tasks: BuildTask[];
 }
 
 export interface Integration {

@@ -14,9 +14,9 @@ const navGroups: Array<{
 }> = [
   {
     title: 'Core',
-    blurb: 'Board-first command of the workspace.',
+    blurb: 'The core surfaces that move work forward.',
     items: [
-      { key: 'command_center', label: 'Command Center', detail: 'Mission, signals, approvals, and founder queue' },
+      { key: 'command_center', label: 'Dashboard', detail: 'Build progress, live board, and founder queue' },
       { key: 'board', label: 'Board', detail: 'Project system for every agent and founder move' },
     ],
   },

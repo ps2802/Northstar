@@ -506,6 +506,105 @@ select:focus {
   gap: 20px;
 }
 
+.build-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.build-dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 250, 242, 0.78);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+}
+
+.build-dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.build-dashboard-metrics article,
+.build-phase-card,
+.build-task-item {
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(16, 35, 68, 0.08);
+}
+
+.build-dashboard-metrics span,
+.build-task-meta span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.build-phase-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.build-phase-card {
+  display: grid;
+  gap: 16px;
+}
+
+.build-phase-head,
+.build-task-head,
+.build-task-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.phase-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.phase-pill-active,
+.build-task-status-in_progress {
+  background: rgba(45, 108, 86, 0.14);
+  color: #1f5a47;
+}
+
+.phase-pill-up_next,
+.build-task-status-next {
+  background: rgba(214, 167, 74, 0.18);
+  color: #826223;
+}
+
+.phase-pill-queued,
+.build-task-status-planned {
+  background: rgba(16, 35, 68, 0.08);
+  color: var(--navy-soft);
+}
+
+.phase-pill-done,
+.build-task-status-done {
+  background: rgba(16, 35, 68, 0.14);
+  color: var(--navy);
+}
+
+.build-task-status-blocked {
+  background: rgba(217, 111, 74, 0.14);
+  color: var(--red);
+}
+
+.build-task-item p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .launchpad {
   grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
   align-items: start;
@@ -1297,6 +1396,8 @@ select:focus {
 .surface-switcher,
 .surface-switch,
 .overview-stack,
+.build-phase-grid,
+.build-task-list,
 .overview-grid,
 .overview-list,
 .priority-row,
@@ -2087,6 +2188,7 @@ select:focus {
 @media (max-width: 1360px) {
   .bridge-dashboard,
   .bridge-onboarding,
+  .build-dashboard-hero,
   .dashboard-shell,
   .launchpad {
     grid-template-columns: 1fr;
@@ -2097,6 +2199,7 @@ select:focus {
   .workspace-topbar-head,
   .workspace-toolbar,
   .workspace-meta-bar,
+  .build-phase-grid,
   .overview-grid,
   .overview-grid-split,
   .overview-wave-grid,

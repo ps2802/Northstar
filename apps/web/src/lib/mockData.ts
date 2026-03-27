@@ -1,4 +1,4 @@
-import type { AppState, Task } from './types';
+import type { AppState, BuildPhase, Task } from './types';
 
 const now = new Date();
 const minutesAgo = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
@@ -801,3 +801,110 @@ export const demoState: AppState = {
     },
   ],
 };
+
+export const redesignBuildPlan: BuildPhase[] = [
+  {
+    id: 'phase_shell',
+    title: 'Shell and navigation cleanup',
+    status: 'active',
+    goal: 'Strip the product shell down to a calm board-first workspace with clear navigation and one obvious next action.',
+    tasks: [
+      {
+        id: 'task_build_dashboard',
+        title: 'Ship build progress dashboard',
+        status: 'in_progress',
+        owner: 'codex',
+        summary: 'Expose what is being built, what is blocked, and what comes next inside the product shell.',
+        nextStep: 'Wire the dashboard into the current command-center surface and keep the summary scannable.',
+      },
+      {
+        id: 'task_sidebar_cleanup',
+        title: 'Simplify left navigation',
+        status: 'next',
+        owner: 'codex',
+        summary: 'Reduce the sidebar to the product surfaces that matter and remove wave-focus narrative modules.',
+        nextStep: 'Replace grouped founder-ops taxonomy with a quieter top-level nav.',
+      },
+      {
+        id: 'task_topbar_cleanup',
+        title: 'Simplify top bar',
+        status: 'planned',
+        owner: 'codex',
+        summary: 'Keep only workspace switcher, search, connection state, and a single primary action.',
+        nextStep: 'Remove competing quick actions and operator-strip noise.',
+      },
+    ],
+  },
+  {
+    id: 'phase_board',
+    title: 'Board-first landing page',
+    status: 'up_next',
+    goal: 'Make the first screen answer what matters now, what needs approval, what is live, and what the next action is.',
+    tasks: [
+      {
+        id: 'task_board_sections',
+        title: 'Rebuild board above the fold',
+        status: 'next',
+        owner: 'codex',
+        summary: 'Limit the first screen to Today, Needs approval, Live campaigns, and Performance snapshot.',
+        nextStep: 'Replace multi-surface overview blocks with four compact operational sections.',
+      },
+      {
+        id: 'task_board_default',
+        title: 'Keep board as default landing',
+        status: 'planned',
+        owner: 'codex',
+        summary: 'Users with an existing workspace should land in execution instead of explanation.',
+        nextStep: 'Make the shell open on Board while preserving onboarding when no project exists.',
+      },
+    ],
+  },
+  {
+    id: 'phase_approvals',
+    title: 'Approval flow cleanup',
+    status: 'queued',
+    goal: 'Make review frictionless so the founder can approve or request changes without hunting for context.',
+    tasks: [
+      {
+        id: 'task_approval_list',
+        title: 'Tighten approvals list',
+        status: 'planned',
+        owner: 'codex',
+        summary: 'Show title, type, why it matters, preview, and approve/request-changes actions in one glance.',
+        nextStep: 'Reduce approval cards to the smallest reviewable unit.',
+      },
+      {
+        id: 'task_approval_detail',
+        title: 'Simplify approval detail',
+        status: 'planned',
+        owner: 'codex',
+        summary: 'Keep the draft, goal, audience, and actions visible without burying decision buttons.',
+        nextStep: 'Trim the drawer/modal copy and surface the core decision context first.',
+      },
+    ],
+  },
+  {
+    id: 'phase_campaigns',
+    title: 'Campaign surface',
+    status: 'queued',
+    goal: 'Introduce a simple campaigns view only after the board and approvals are calm and trustworthy.',
+    tasks: [
+      {
+        id: 'task_campaign_list',
+        title: 'Model campaign list',
+        status: 'planned',
+        owner: 'codex',
+        summary: 'Create a lightweight campaign list tied to board tasks and assets instead of inventing a second product.',
+        nextStep: 'Define the smallest useful campaign object from existing tasks and artifacts.',
+      },
+      {
+        id: 'task_campaign_detail',
+        title: 'Group assets by campaign',
+        status: 'blocked',
+        owner: 'codex',
+        summary: 'Campaign detail should wait until the data model is cleaned up and the board-first flow is stable.',
+        nextStep: 'Do not expand this until shell and board cleanup are finished.',
+      },
+    ],
+  },
+];
