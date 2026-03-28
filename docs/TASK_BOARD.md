@@ -1,50 +1,45 @@
 # Northstar Task Board
 
-Status date: March 27, 2026
+Status date: March 28, 2026
 
 ## Current truth
 
-- Wave 1 and Wave 2 are no longer backlog items. Audit calibration and the founder-OS shell are implemented enough for dogfood and pilot demos.
-- Wave 3 is partly real: persistence, approvals, revisions, providers, integrations, and execution-job records are shipped, but execution is still mock-driven.
-- Wave 4 is partly real: CRM and research exist as product surfaces and seeded demo flows, not as live end-to-end systems.
-- Wave 5 is partly real: deployment path and runbooks exist, but real auth, secure ownership, and production-grade execution reliability are still open.
+- Northstar is a strong demo and a promising internal alpha.
+- Northstar is not yet a strong external v1.
+- The founder product now tells the truth about what is live, what is cached, and what is only sample or fallback state.
+- `blog_brief` is the only live execution path in the founder UI.
+- All other task types remain planning-only for this build.
 
 ## Done
 
-- Northstar self-audit corrected the product thesis from QA drift to founder-OS positioning
-- pilot calibration audits completed for Northstar, Moongate, Gridlock, and Nightwatch QA
-- staged onboarding, founder follow-up capture, dashboard re-entry, and board-first shell shipped
-- task rationale, comments, movement history, approvals, rejection notes, and revision queue shipped
-- provider setup, integration setup, and persisted workspace configuration shipped
-- Postgres Prisma schema, checked-in migrations, Vercel deploy path, and runbooks shipped
-- live API validation completed for onboarding, manual task creation, v1 asset generation, approvals, and comments
+- founder-facing build and wave scaffolding removed from the main product shell
+- founder-facing connection language changed to saved or unverified state
+- non-live workspace states called out directly in the UI
+- risky mutations blocked for sample, cached stale, unauthenticated, and fallback-understanding workspaces
+- founder access now comes from server-issued workspace sessions tied to founder email plus workspace website
+- non-health product routes now require a founder session header, with only onboarding and access bootstrap left public
+- backend serialization now returns masked display fields instead of raw provider or connection payloads
 
 ## Active priorities
 
-- replace `MockFounderExecutor` with a real provider-backed path for supported v1 asset types
-- replace the local session foundation with real Google/email auth
-- validate provider/integration credentials against real downstream systems
-- decide whether CRM and research need live persistence for the first external pilot
-- run the full deployed QA pass on hosted Postgres using Northstar as the first workspace
+- replace `MockFounderExecutor` behind `blog_brief` with a real provider-backed path
+- validate provider and integration credentials against real downstream systems
+- harden execution-job failure handling and recovery
+- run deployed QA against the live session-protected stack
 
 ## Remaining or mocked
 
-- execution still uses mocked generation logic
-- unsupported task types still block instead of executing
-- integrations mostly persist state without real delivery or syncing depth
+- `blog_brief` execution still uses mocked generation logic
+- integrations mostly persist saved state without real delivery or validation depth
 - CRM contacts and research notes are still seeded/demo data in the web app
 - no worker/retry daemon yet for queued execution jobs
 - no team collaboration layer yet
-
-## Decisions still needed
-
-- which generation provider is the default live path
-- which auth path ships first: Google or email magic link
-- whether first pilot scope includes live CRM/research records or keeps those surfaces demo-only
+- stronger verified identity flows like OAuth or magic-link email auth are still not present
 
 ## Test next
 
-- Northstar-on-Northstar after any README or positioning changes
-- provider-backed generation, approval, rejection, and revision resubmission on deployed infrastructure
-- hosted Postgres deploy + migrate + seed + dashboard re-entry flow
-- provider/integration connect, disconnect, and sync behavior with real credentials
+- Northstar-on-Northstar after trust-copy changes
+- fresh load with no session should land on onboarding, not a load error
+- cached stale workspace should stay read-only with explicit banners
+- live `blog_brief` execution, approval, and rejection should still work end to end
+- session-scoped route access should reject cross-workspace requests

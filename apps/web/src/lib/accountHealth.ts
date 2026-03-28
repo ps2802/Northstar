@@ -3,9 +3,9 @@ import type { ExecutionProvider, Integration } from './types';
 export type AccountHealth = 'connected' | 'needs_reconnect' | 'not_connected';
 
 export const accountHealthLabel: Record<AccountHealth, string> = {
-  connected: 'Connected',
-  needs_reconnect: 'Needs reconnect',
-  not_connected: 'Not connected',
+  connected: 'Saved, unverified',
+  needs_reconnect: 'Credential missing',
+  not_connected: 'Not set up',
 };
 
 export const accountHealthClass: Record<AccountHealth, string> = {

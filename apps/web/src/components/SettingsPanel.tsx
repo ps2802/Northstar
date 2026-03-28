@@ -58,8 +58,8 @@ export function SettingsPanel({
       <section className="rail-card section-card">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow">Connected accounts</p>
-            <h2>Connection health</h2>
+            <p className="eyebrow">Saved access</p>
+            <h2>Saved access state</h2>
           </div>
           <button className="ghost-button" type="button" onClick={onOpenConnections}>
             Open connections
@@ -70,17 +70,17 @@ export function SettingsPanel({
           <article className="settings-detail-card">
             <span>Workflow accounts</span>
             <div className="settings-chip-row">
-              <span className="connection-status-connected">{integrationSummary.connected} connected</span>
-              <span className="connection-status-needs_key">{integrationSummary.needsReconnect} needs reconnect</span>
-              <span className="connection-status-planned">{integrationSummary.notConnected} not connected</span>
+              <span className="connection-status-connected">{integrationSummary.connected} saved, unverified</span>
+              <span className="connection-status-needs_key">{integrationSummary.needsReconnect} credential missing</span>
+              <span className="connection-status-planned">{integrationSummary.notConnected} not set up</span>
             </div>
           </article>
           <article className="settings-detail-card">
             <span>Execution engines</span>
             <div className="settings-chip-row">
-              <span className="connection-status-connected">{providerSummary.connected} connected</span>
-              <span className="connection-status-needs_key">{providerSummary.needsReconnect} needs reconnect</span>
-              <span className="connection-status-planned">{providerSummary.notConnected} not connected</span>
+              <span className="connection-status-connected">{providerSummary.connected} saved, unverified</span>
+              <span className="connection-status-needs_key">{providerSummary.needsReconnect} credential missing</span>
+              <span className="connection-status-planned">{providerSummary.notConnected} not set up</span>
             </div>
           </article>
         </div>

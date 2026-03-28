@@ -8,7 +8,6 @@ interface WorkspaceNavProps {
 }
 
 const navItems: Array<{ key: DashboardSection; label: string }> = [
-  { key: 'command_center', label: 'Dashboard' },
   { key: 'board', label: 'Board' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'content', label: 'Campaigns' },
@@ -34,7 +33,7 @@ export function WorkspaceNav({ activeSection, founderQueueCount, onChange, pendi
           </div>
         </div>
 
-        <p className="workspace-sidebar-intro">Visible agent work, founder approvals, and shipped output stay anchored to the board.</p>
+        <p className="workspace-sidebar-intro">Current work, founder approvals, and honest workspace state stay anchored to the board.</p>
       </div>
 
       <nav className="workspace-nav" aria-label="Workspace sections">

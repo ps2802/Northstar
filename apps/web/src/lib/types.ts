@@ -90,6 +90,35 @@ export interface FounderSession {
   displayName: string;
 }
 
+export type WorkspaceSessionState = 'active' | 'missing' | 'expired' | 'revoked' | 'invalid';
+export type WorkspaceTruthSource = 'live' | 'cached' | 'sample' | 'unauthenticated';
+export type WorkspaceUnderstanding = 'verified' | 'fallback' | 'incomplete';
+
+export interface WorkspaceAccessSession {
+  id: string;
+  workspaceId: string;
+  projectId?: string | null;
+  email: string;
+  name: string;
+  role: 'founder' | 'member';
+  status: 'active' | 'expired' | 'revoked';
+  lastSeenAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceTruth {
+  source: WorkspaceTruthSource;
+  freshness: 'fresh' | 'stale';
+  sessionState: WorkspaceSessionState;
+  understanding: WorkspaceUnderstanding;
+  riskyMutationsAllowed: boolean;
+  tokenPresent: boolean;
+  loadedAt: string;
+  session?: WorkspaceAccessSession | null;
+}
+
 export interface ExecutionProvider {
   id: string;
   name: string;
@@ -338,6 +367,7 @@ export interface AppState {
   integrations: Integration[];
   crmContacts: CRMContact[];
   researchNotes: ResearchNote[];
+  workspaceTruth?: WorkspaceTruth;
 }
 
 export interface NewTaskInput {

@@ -7,21 +7,52 @@ import type {
   ExecutionProvider,
   ExecutionPreference,
   FounderIntake,
-  FounderSession,
   Integration,
   NewTaskInput,
   Task,
   TaskStatus,
-  TaskType
+  TaskType,
+  WorkspaceAccessSession,
+  WorkspaceTruth
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:4000" : "/api");
 const STORAGE_KEY = "founder-os-state";
 const INTEGRATION_OVERRIDES_KEY = "founder-os-integrations";
+const SESSION_STORAGE_KEY = "founder-os-session";
+export const LIVE_SESSION_REQUIRED_MESSAGE = "A live founder session is required before changing workspace data.";
 // TODO(v2): Route this through adapter-aware transport so WhatsApp, Telegram, and bot channels can reuse the same command center state.
 
 type BackendTaskStatus = "INBOX" | "EVALUATING" | "PLANNED" | "IN_PROGRESS" | "WAITING_FOR_APPROVAL" | "DONE" | "BLOCKED";
 type BackendTaskType = "SEO_AUDIT" | "KEYWORD_CLUSTER" | "META_REWRITE" | "BLOG_BRIEF" | "LINKEDIN_POST_SET" | "X_POST_SET" | "HOMEPAGE_COPY_SUGGESTION" | "COMPETITOR_SCAN";
+type BackendWorkspaceSessionStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
+
+interface BackendWorkspaceSession {
+  id: string;
+  workspace_id: string;
+  project_id?: string | null;
+  founder_intake_id?: string | null;
+  email: string;
+  name: string;
+  role: "FOUNDER" | "MEMBER";
+  status: BackendWorkspaceSessionStatus;
+  last_seen_at?: string | null;
+  expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface StoredWorkspaceSession {
+  token: string;
+  session: WorkspaceAccessSession;
+}
+
+interface SessionHealth {
+  token: string | null;
+  session: WorkspaceAccessSession | null;
+  sessionState: WorkspaceTruth["sessionState"];
+  tokenPresent: boolean;
+}
 
 interface BackendDashboard {
   workspace: {
@@ -128,12 +159,6 @@ interface BackendWorkspaceConfiguration {
     auth_method?: FounderIntake["authMethod"];
     email?: string;
   };
-  founder_session?: {
-    auth_method: FounderSession["authMethod"];
-    email?: string;
-    status: FounderSession["status"];
-    display_name: string;
-  };
   execution_provider?: {
     active_provider: string;
     providers: Array<{
@@ -195,6 +220,163 @@ const maskSecret = (value: string) => {
 };
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
+const normalizeFounderSessionName = (email: string, projectName?: string) => {
+  const emailLocal = email.split("@")[0]?.trim();
+  if (emailLocal) {
+    return emailLocal
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  return projectName ? `${projectName} founder` : "Founder";
+};
+
+const mapWorkspaceSession = (session: BackendWorkspaceSession): WorkspaceAccessSession => ({
+  id: session.id,
+  workspaceId: session.workspace_id,
+  projectId: session.project_id ?? null,
+  email: session.email,
+  name: session.name,
+  role: session.role === "MEMBER" ? "member" : "founder",
+  status: session.status === "ACTIVE" ? "active" : session.status === "EXPIRED" ? "expired" : "revoked",
+  lastSeenAt: session.last_seen_at ?? null,
+  expiresAt: session.expires_at ?? null,
+  createdAt: session.created_at,
+  updatedAt: session.updated_at,
+});
+
+const updateSessionTruth = (sessionState: WorkspaceTruth["sessionState"], session: WorkspaceAccessSession | null, source: WorkspaceTruth["source"] = "cached") => {
+  latestState = withWorkspaceTruth(hydrateState(latestState), {
+    source,
+    freshness: "stale",
+    sessionState,
+    riskyMutationsAllowed: false,
+    tokenPresent: false,
+    session,
+    loadedAt: new Date().toISOString(),
+  });
+  saveState(latestState);
+};
+
+const readStoredSession = (): StoredWorkspaceSession | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as StoredWorkspaceSession;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredSession = (token: string, session: WorkspaceAccessSession) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ token, session }));
+};
+
+const clearStoredSession = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+};
+
+const getStoredSessionHealth = (): SessionHealth => {
+  const stored = readStoredSession();
+  if (!stored) {
+    return {
+      token: null,
+      session: null,
+      sessionState: "missing",
+      tokenPresent: false,
+    };
+  }
+
+  if (stored.session.status === "revoked") {
+    return {
+      token: null,
+      session: stored.session,
+      sessionState: "revoked",
+      tokenPresent: true,
+    };
+  }
+
+  const expiresAt = stored.session.expiresAt ? Date.parse(stored.session.expiresAt) : Number.NaN;
+  if (stored.session.status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= Date.now())) {
+    return {
+      token: null,
+      session: { ...stored.session, status: "expired" },
+      sessionState: "expired",
+      tokenPresent: true,
+    };
+  }
+
+  return {
+    token: stored.token,
+    session: stored.session,
+    sessionState: "active",
+    tokenPresent: true,
+  };
+};
+
+const inferWorkspaceUnderstanding = (founderIntake: FounderIntake | null): WorkspaceTruth["understanding"] => {
+  if (!founderIntake) {
+    return "fallback";
+  }
+
+  const coverage = [
+    founderIntake.businessDescription.trim(),
+    founderIntake.icp.trim(),
+    founderIntake.mainGoal.trim(),
+    founderIntake.keyChannel.trim(),
+  ].filter(Boolean).length;
+
+  if (coverage <= 1) {
+    return "fallback";
+  }
+
+  return coverage < 4 ? "incomplete" : "verified";
+};
+
+const buildWorkspaceTruth = (founderIntake: FounderIntake | null, current?: Partial<WorkspaceTruth>): WorkspaceTruth => {
+  const source = current?.source ?? "sample";
+  const sessionState = current?.sessionState ?? "missing";
+  const understanding = inferWorkspaceUnderstanding(founderIntake);
+  const hasLiveSession = source === "live" && sessionState === "active";
+  const requestedMutationState = current?.riskyMutationsAllowed ?? hasLiveSession;
+
+  return {
+    source,
+    freshness: current?.freshness ?? (source === "live" ? "fresh" : "stale"),
+    sessionState,
+    understanding,
+    riskyMutationsAllowed: Boolean(requestedMutationState) && hasLiveSession && understanding !== "fallback",
+    tokenPresent: current?.tokenPresent ?? Boolean(current?.session),
+    loadedAt: current?.loadedAt ?? new Date().toISOString(),
+    session: current?.session ?? null,
+  };
+};
+
+const withWorkspaceTruth = (state: AppState, truth: Partial<WorkspaceTruth>): AppState => hydrateState({
+  ...state,
+  workspaceTruth: buildWorkspaceTruth(state.founderIntake ?? null, {
+    ...state.workspaceTruth,
+    ...truth,
+  }),
+});
+
 const parseWorkspaceConfiguration = (value: unknown): BackendWorkspaceConfiguration | null => {
   if (!isRecord(value)) {
     return null;
@@ -218,10 +400,10 @@ const deriveGoals = (founderIntake: FounderIntake | null, tasks: Task[]) => {
   return [
     {
       id: "goal_active_pipeline",
-      title: founderIntake.mainGoal || "Build a founder-usable growth system",
+      title: founderIntake.mainGoal || "Run a founder-usable growth system",
       metric: "Primary founder outcome",
       target: founderIntake.keyChannel || "Multi-channel execution",
-      horizon: "Current wave",
+      horizon: "Current focus",
       summary: founderIntake.priorityWork || "Northstar should sequence the next useful work across planning and execution.",
     },
     {
@@ -393,6 +575,13 @@ const createCachedFallbackState = (): AppState => ({
   integrations: getDefaultIntegrations(),
   crmContacts: [],
   researchNotes: [],
+  workspaceTruth: buildWorkspaceTruth(null, {
+    source: "sample",
+    freshness: "stale",
+    sessionState: "missing",
+    riskyMutationsAllowed: false,
+    tokenPresent: false,
+  }),
 });
 
 const loadIntegrationOverrides = (): Record<string, IntegrationOverride> => {
@@ -432,6 +621,7 @@ const hydrateState = (state: AppState): AppState => {
   const integrations = mergeIntegrationOverrides(state.integrations ?? base.integrations);
   const tasks = (state.tasks?.length ? state.tasks : base.tasks).map(normalizeTask);
   const founderIntake = state.founderIntake ?? base.founderIntake;
+  const workspaceTruth = buildWorkspaceTruth(founderIntake, state.workspaceTruth ?? base.workspaceTruth);
   return {
     ...base,
     ...state,
@@ -449,6 +639,7 @@ const hydrateState = (state: AppState): AppState => {
     integrations,
     crmContacts: state.crmContacts ?? base.crmContacts,
     researchNotes: state.researchNotes ?? base.researchNotes,
+    workspaceTruth,
   };
 };
 
@@ -625,17 +816,8 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       priorityWork: configuration.founder_intake.priority_work ?? "",
       competitors: configuration.founder_intake.competitors ?? "",
       bottleneck: configuration.founder_intake.bottleneck ?? "conversion",
-      authMethod: configuration.founder_intake.auth_method ?? configuration.founder_session?.auth_method ?? "google",
-      email: configuration.founder_intake.email ?? configuration.founder_session?.email,
-    }
-    : null;
-
-  const founderSession: FounderSession | null = configuration?.founder_session
-    ? {
-      authMethod: configuration.founder_session.auth_method,
-      email: configuration.founder_session.email,
-      status: configuration.founder_session.status,
-      displayName: configuration.founder_session.display_name,
+      authMethod: configuration.founder_intake.auth_method ?? "email",
+      email: configuration.founder_intake.email,
     }
     : null;
 
@@ -738,7 +920,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       opportunities: dashboard.company_profile.opportunities
     },
     founderIntake,
-    founderSession,
+    founderSession: null,
     tasks,
     artifacts,
     approvals,
@@ -795,10 +977,21 @@ const getResponseErrorMessage = async (response: Response) => {
   return fallbackMessage;
 };
 
-const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
+const fetchJson = async <T,>(
+  path: string,
+  init?: RequestInit,
+  options?: { includeStoredSession?: boolean },
+): Promise<T> => {
   const headers = new Headers(init?.headers);
   if (init?.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (options?.includeStoredSession !== false) {
+    const { token } = getStoredSessionHealth();
+    if (token && !headers.has("x-northstar-session")) {
+      headers.set("x-northstar-session", token);
+    }
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -807,7 +1000,20 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   });
 
   if (!response.ok) {
-    throw new Error(await getResponseErrorMessage(response));
+    const message = await getResponseErrorMessage(response);
+    if (response.status === 401) {
+      const stored = readStoredSession();
+      clearStoredSession();
+      updateSessionTruth(
+        message.includes("expired") ? "expired" : message.includes("revoked") ? "revoked" : "invalid",
+        stored?.session ?? null,
+        "cached",
+      );
+    }
+
+    const error = new Error(message) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   return (await response.json()) as T;
@@ -815,14 +1021,23 @@ const fetchJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 
 let latestState: AppState = loadState();
 
-const persistAndReturn = (state: AppState) => {
-  const next = hydrateState(state);
+const persistAndReturn = (state: AppState, workspaceTruth?: Partial<WorkspaceTruth>) => {
+  const next = workspaceTruth ? withWorkspaceTruth(hydrateState(state), workspaceTruth) : hydrateState(state);
   latestState = next;
   saveState(next);
   return clone(next);
 };
 
 const createMutationError = (message: string) => new Error(message);
+
+const requireLiveSession = () => {
+  const sessionHealth = getStoredSessionHealth();
+  if (sessionHealth.sessionState !== "active" || !sessionHealth.token) {
+    throw createMutationError(LIVE_SESSION_REQUIRED_MESSAGE);
+  }
+
+  return sessionHealth;
+};
 
 const getPendingApprovalForTask = (taskId: string) => {
   const approval = latestState.approvals.find((item) => item.taskId === taskId && item.status === "pending");
@@ -835,7 +1050,6 @@ const getPendingApprovalForTask = (taskId: string) => {
 
 const buildWorkspaceConfigurationPayload = (overrides?: {
   founderIntake?: FounderIntake | null;
-  founderSession?: FounderSession | null;
   executionProviders?: ExecutionProvider[];
   activeProviderId?: string;
   integrations?: Integration[];
@@ -858,19 +1072,6 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
       bottleneck: founderIntake.bottleneck,
       auth_method: founderIntake.authMethod,
       email: founderIntake.email,
-    };
-  })(),
-  founder_session: (() => {
-    const founderSession = overrides?.founderSession ?? latestState.founderSession;
-    if (!founderSession) {
-      return undefined;
-    }
-
-    return {
-      auth_method: founderSession.authMethod,
-      email: founderSession.email,
-      status: founderSession.status,
-      display_name: founderSession.displayName,
     };
   })(),
   execution_provider: {
@@ -902,6 +1103,108 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
   })),
 });
 
+const getLiveWorkspaceTruth = (sessionHealth: SessionHealth): Partial<WorkspaceTruth> => ({
+  source: "live",
+  freshness: "fresh",
+  sessionState: "active",
+  riskyMutationsAllowed: true,
+  tokenPresent: true,
+  session: sessionHealth.session,
+  loadedAt: new Date().toISOString(),
+});
+
+const getNonLiveWorkspaceTruth = (
+  sessionHealth: SessionHealth,
+  source: WorkspaceTruth["source"],
+): Partial<WorkspaceTruth> => ({
+  source,
+  freshness: "stale",
+  sessionState: sessionHealth.sessionState,
+  riskyMutationsAllowed: false,
+  tokenPresent: sessionHealth.tokenPresent,
+  session: sessionHealth.session,
+});
+
+const validateStoredSession = async (): Promise<SessionHealth> => {
+  const localSession = getStoredSessionHealth();
+  if (localSession.sessionState !== "active" || !localSession.token) {
+    return localSession;
+  }
+
+  try {
+    const response = await fetchJson<{ session: BackendWorkspaceSession }>(
+      "/auth/session",
+      {
+        headers: {
+          "x-northstar-session": localSession.token,
+        },
+      },
+      { includeStoredSession: false },
+    );
+    const session = mapWorkspaceSession(response.session);
+    if (session.status !== "active") {
+      clearStoredSession();
+      return {
+        token: null,
+        session,
+        sessionState: session.status,
+        tokenPresent: true,
+      };
+    }
+
+    writeStoredSession(localSession.token, session);
+    return {
+      token: localSession.token,
+      session,
+      sessionState: "active",
+      tokenPresent: true,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === "Session not found") {
+      clearStoredSession();
+      return {
+        token: null,
+        session: null,
+        sessionState: "invalid",
+        tokenPresent: true,
+      };
+    }
+
+    throw error;
+  }
+};
+
+const restoreWorkspaceAccess = async (input: {
+  websiteUrl: string;
+  email?: string;
+  name?: string;
+}) => {
+  const email = input.email?.trim().toLowerCase();
+  if (!email) {
+    return null;
+  }
+
+  const response = await fetchJson<{ session: BackendWorkspaceSession; token: string; dashboard: BackendDashboard | null }>(
+    "/auth/access",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        website_url: input.websiteUrl,
+        email,
+        name: input.name?.trim() || normalizeFounderSessionName(email),
+      }),
+    },
+    { includeStoredSession: false },
+  );
+
+  const session = mapWorkspaceSession(response.session);
+  writeStoredSession(response.token, session);
+  return {
+    session,
+    dashboard: response.dashboard ? mapDashboard(response.dashboard) : null,
+  };
+};
+
 export interface FounderApi {
   getState: (projectId?: string) => Promise<AppState>;
   listProjects: () => Promise<BackendProjectSummary[]>;
@@ -923,6 +1226,10 @@ export interface FounderApi {
 
 export const createFounderApi = (): FounderApi => ({
   getState: async (projectId?: string) => {
+    const sessionHealth = await validateStoredSession();
+    if (sessionHealth.sessionState !== "active" || !sessionHealth.token) {
+      throw createMutationError(LIVE_SESSION_REQUIRED_MESSAGE);
+    }
     if (!projectId) {
       const projectResponse = await fetchJson<{ projects: Array<{ id: string }> }>("/projects");
       if (projectResponse.projects.length === 0) {
@@ -933,9 +1240,13 @@ export const createFounderApi = (): FounderApi => ({
     }
 
     const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${projectId}/dashboard`);
-    return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   listProjects: async () => {
+    const sessionHealth = await validateStoredSession();
+    if (sessionHealth.sessionState !== "active" || !sessionHealth.token) {
+      throw createMutationError(LIVE_SESSION_REQUIRED_MESSAGE);
+    }
     const projectResponse = await fetchJson<{ projects: Array<{ id: string; workspaceId?: string; workspace_id?: string; name: string; websiteUrl?: string; website_url?: string; createdAt?: string; created_at?: string }> }>("/projects");
     return projectResponse.projects.map((project) => ({
       id: project.id,
@@ -947,7 +1258,17 @@ export const createFounderApi = (): FounderApi => ({
   },
   getCachedState: () => {
     const cached = readStoredState();
-    return cached ? clone(cached) : null;
+    if (!cached) {
+      return null;
+    }
+
+    const sessionHealth = getStoredSessionHealth();
+    const source = cached.workspaceTruth?.source === "sample"
+      ? "sample"
+      : cached.workspaceTruth?.source === "unauthenticated"
+        ? "unauthenticated"
+        : "cached";
+    return clone(withWorkspaceTruth(cached, getNonLiveWorkspaceTruth(sessionHealth, source)));
   },
   listCachedProjects: () => {
     const cached = readStoredState();
@@ -964,7 +1285,37 @@ export const createFounderApi = (): FounderApi => ({
     }];
   },
   analyzeWebsite: async (intake: FounderIntake) => {
-    const response = await fetchJson<{ dashboard: BackendDashboard }>("/projects/onboard", {
+    const email = intake.email?.trim().toLowerCase();
+    if (!email) {
+      throw createMutationError("Add the founder work email to create or restore workspace access.");
+    }
+
+    try {
+      const restored = await restoreWorkspaceAccess({
+        websiteUrl: intake.websiteUrl,
+        email,
+        name: normalizeFounderSessionName(email),
+      });
+
+      if (restored && restored.dashboard) {
+        return persistAndReturn(restored.dashboard, {
+          source: "live",
+          freshness: "fresh",
+          sessionState: "active",
+          riskyMutationsAllowed: true,
+          tokenPresent: true,
+          session: restored.session,
+          loadedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
+      if (status !== 404) {
+        throw error;
+      }
+    }
+
+    const response = await fetchJson<{ dashboard: BackendDashboard; session?: BackendWorkspaceSession; token?: string }>("/projects/onboard", {
       method: "POST",
       body: JSON.stringify({
         website_url: intake.websiteUrl,
@@ -976,15 +1327,33 @@ export const createFounderApi = (): FounderApi => ({
         priority_work: intake.priorityWork,
         competitors: intake.competitors,
         bottleneck: intake.bottleneck,
-        auth_method: intake.authMethod,
-        email: intake.email,
+        auth_method: "email",
+        email,
       })
+    }, { includeStoredSession: false });
+
+    const nextState = mapDashboard(response.dashboard);
+    if (!response.session || !response.token) {
+      throw createMutationError("Workspace was created, but founder access was not established.");
+    }
+
+    const session = mapWorkspaceSession(response.session);
+    writeStoredSession(response.token, session);
+
+    return persistAndReturn(nextState, {
+      source: "live",
+      freshness: "fresh",
+      sessionState: "active",
+      riskyMutationsAllowed: true,
+      tokenPresent: true,
+      session,
+      loadedAt: new Date().toISOString(),
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
   },
   addTask: async (input: NewTaskInput) => {
+    const sessionHealth = requireLiveSession();
     if (!supportedManualTaskTypeSet.has(input.type)) {
-      throw createMutationError(`${input.type.replaceAll("_", " ")} is not supported in this build yet.`);
+      throw createMutationError(`${input.type.replaceAll("_", " ")} is not available in this workspace yet.`);
     }
 
     await fetchJson<{ task: { id: string } }>(`/projects/${latestState.project.id}/tasks`, {
@@ -1001,43 +1370,47 @@ export const createFounderApi = (): FounderApi => ({
       })
     });
     const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
-    return persistAndReturn(mapDashboard(dashboardResponse.dashboard));
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   updateTaskStatus: async (taskId: string, status: TaskStatus) => {
+    const sessionHealth = requireLiveSession();
     if (status === "waiting_on_founder") {
-      throw createMutationError("Move founder-dependent work through approvals or keep it blocked in this build.");
+      throw createMutationError("Move founder-dependent work through approvals or keep it blocked in this workspace.");
     }
 
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/status`, {
       method: "POST",
       body: JSON.stringify({ status: uiStatusToBackend(status) })
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   executeTask: async (taskId: string, _preference?: ExecutionPreference) => {
+    const sessionHealth = requireLiveSession();
     const task = latestState.tasks.find((item) => item.id === taskId);
     if (!task) {
       throw createMutationError("Task not found.");
     }
 
     if (task.type !== "blog_brief") {
-      throw createMutationError("Only blog brief execution is supported in this build.");
+      throw createMutationError("Only blog brief generation is live in this workspace.");
     }
 
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/execute`, {
       method: "POST"
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   approveArtifact: async (taskId: string) => {
+    const sessionHealth = requireLiveSession();
     const approval = getPendingApprovalForTask(taskId);
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
       method: "POST",
       body: JSON.stringify({ decision: "APPROVED" })
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   rejectArtifact: async (taskId: string, note?: string) => {
+    const sessionHealth = requireLiveSession();
     const approval = getPendingApprovalForTask(taskId);
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/approvals/${approval.id}/decision`, {
       method: "POST",
@@ -1046,9 +1419,10 @@ export const createFounderApi = (): FounderApi => ({
         note: note?.trim() ? note.trim() : undefined
       })
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   addComment: async (taskId: string, body: string) => {
+    const sessionHealth = requireLiveSession();
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/tasks/${taskId}/comments`, {
       method: "POST",
       body: JSON.stringify({
@@ -1056,9 +1430,10 @@ export const createFounderApi = (): FounderApi => ({
         author: "founder"
       })
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   connectProvider: async (providerId: string, credential?: string) => {
+    const sessionHealth = requireLiveSession();
     const provider = latestState.executionProviders.find((item) => item.id === providerId);
     if (!provider) {
       throw createMutationError("Execution provider not found.");
@@ -1082,9 +1457,10 @@ export const createFounderApi = (): FounderApi => ({
       method: "POST",
       body: JSON.stringify(buildWorkspaceConfigurationPayload({ executionProviders }))
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   activateProvider: async (providerId: string) => {
+    const sessionHealth = requireLiveSession();
     const provider = latestState.executionProviders.find((item) => item.id === providerId);
     if (!provider) {
       throw createMutationError("Execution provider not found.");
@@ -1106,9 +1482,10 @@ export const createFounderApi = (): FounderApi => ({
         activeProviderId: providerId,
       }))
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   connectIntegration: async (integrationId: string, credential?: string) => {
+    const sessionHealth = requireLiveSession();
     const integration = latestState.integrations.find((item) => item.id === integrationId);
     if (!integration) {
       throw createMutationError("Integration not found.");
@@ -1122,21 +1499,20 @@ export const createFounderApi = (): FounderApi => ({
     const integrations: Integration[] = latestState.integrations.map((current): Integration => current.id === integrationId ? ({
       ...current,
       status: "connected",
-      connectedAs: current.authType === "oauth"
-        ? latestState.founderSession?.displayName ?? "Founder workspace"
-        : `${current.name} workspace`,
+      connectedAs: undefined,
       maskedSecret: current.authType === "api_key" ? maskSecret(credential ?? "") : current.maskedSecret,
       connectedAt,
-      lastSyncAt: connectedAt,
+      lastSyncAt: undefined,
     }) : current);
 
     const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
       method: "POST",
       body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   disconnectIntegration: async (integrationId: string) => {
+    const sessionHealth = requireLiveSession();
     const integration = latestState.integrations.find((item) => item.id === integrationId);
     if (!integration) {
       throw createMutationError("Integration not found.");
@@ -1155,28 +1531,15 @@ export const createFounderApi = (): FounderApi => ({
       method: "POST",
       body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
     });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   syncIntegration: async (integrationId: string) => {
+    requireLiveSession();
     const integration = latestState.integrations.find((item) => item.id === integrationId);
     if (!integration) {
       throw createMutationError("Integration not found.");
     }
 
-    if (integration.status !== "connected") {
-      throw createMutationError(`Connect ${integration.name} before running a sync.`);
-    }
-
-    const lastSyncAt = new Date().toISOString();
-    const integrations = latestState.integrations.map((current) => current.id === integrationId ? ({
-      ...current,
-      lastSyncAt,
-    }) : current);
-
-    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-      method: "POST",
-      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
-    });
-    return persistAndReturn(mapDashboard(response.dashboard));
+    throw createMutationError(`Live validation for ${integration.name} is not available in this workspace yet.`);
   }
 });

@@ -11,6 +11,9 @@ import { createFallbackIngestion } from "./fallback.js";
 const executor = new MockFounderExecutor();
 const DEFAULT_COMMENT_AUTHOR = "founder";
 const WORKSPACE_CONFIGURATION_RUN_TYPE = "workspace_configuration";
+const EXECUTABLE_TASK_STATUSES = new Set(["PLANNED", "IN_PROGRESS"]);
+const EXECUTABLE_TASK_TYPES = new Set(["BLOG_BRIEF"]);
+const MANUAL_LOCKED_TASK_STATUSES = new Set(["WAITING_FOR_APPROVAL", "DONE"]);
 
 type FounderIntakePayload = {
   website_url: string;
@@ -24,13 +27,6 @@ type FounderIntakePayload = {
   bottleneck?: "traffic" | "conversion" | "both";
   auth_method?: "google" | "email";
   email?: string;
-};
-
-type FounderSessionConfig = {
-  auth_method: "google" | "email";
-  email?: string;
-  status: "connected" | "pending";
-  display_name: string;
 };
 
 type ExecutionProviderConfig = {
@@ -61,7 +57,6 @@ type IntegrationConfig = {
 
 type WorkspaceConfiguration = {
   founder_intake?: FounderIntakePayload;
-  founder_session?: FounderSessionConfig;
   execution_provider: {
     active_provider: string;
     providers: ExecutionProviderConfig[];
@@ -205,17 +200,10 @@ const maskSecret = (value: string) => {
   return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
 };
 
-const buildWorkspaceConfiguration = (websiteUrl: string, intake?: FounderIntakePayload): WorkspaceConfiguration => {
+const buildWorkspaceConfiguration = (_websiteUrl: string, intake?: FounderIntakePayload): WorkspaceConfiguration => {
   const now = new Date().toISOString();
-  const authMethod = intake?.auth_method ?? "google";
   return {
     founder_intake: intake,
-    founder_session: {
-      auth_method: authMethod,
-      email: intake?.email,
-      status: "connected",
-      display_name: intake?.email?.trim() || new URL(websiteUrl).hostname.replace(/^www\./, "")
-    },
     execution_provider: defaultExecutionProviders(),
     integrations: defaultIntegrations(),
     updated_at: now
@@ -266,7 +254,6 @@ const normalizeWorkspaceConfiguration = (projectId: string, current: WorkspaceCo
 
   return {
     founder_intake: patch.founder_intake ?? baseline.founder_intake,
-    founder_session: patch.founder_session ?? baseline.founder_session,
     execution_provider: {
       active_provider: activeProvider,
       providers: providers.map((provider) => ({
@@ -281,6 +268,29 @@ const normalizeWorkspaceConfiguration = (projectId: string, current: WorkspaceCo
 
 const buildExecutionCompanySummary = (summary: string, founderPlanningContext?: string | null) =>
   founderPlanningContext ? `${summary}\n\nFounder context:\n${founderPlanningContext}` : summary;
+
+const hasOpenReviewState = async (artifactId: string) => {
+  const [pendingApproval, openRevision] = await Promise.all([
+    prisma.approval.findFirst({
+      where: {
+        artifactId,
+        status: "PENDING"
+      },
+      select: { id: true }
+    }),
+    prisma.artifactRevision.findFirst({
+      where: {
+        artifactId,
+        status: {
+          in: ["REQUESTED", "SUBMITTED"]
+        }
+      },
+      select: { id: true }
+    })
+  ]);
+
+  return Boolean(pendingApproval || openRevision);
+};
 
 const loadDashboardRecord = async (projectId: string) => {
   const project = await prisma.project.findUnique({
@@ -528,7 +538,7 @@ export const onboardProject = async (input: FounderIntakePayload | string) => {
   await createWorkspaceConfigurationRun(
     projectId,
     buildWorkspaceConfiguration(ingestion.website_url, intake),
-    "Captured founder setup, auth preference, execution providers, and initial integrations."
+    "Captured founder setup, execution providers, and initial integrations."
   );
 
   await prisma.agentRun.create({
@@ -555,8 +565,11 @@ export const getDashboard = async (projectId: string) => {
   return loadDashboardRecord(projectId);
 };
 
-export const listProjects = async () => {
-  return prisma.project.findMany({ orderBy: { createdAt: "desc" } });
+export const listProjects = async (workspaceId: string) => {
+  return prisma.project.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: "desc" }
+  });
 };
 
 export const updateWorkspaceConfiguration = async (projectId: string, patch: Partial<WorkspaceConfiguration>) => {
@@ -644,6 +657,12 @@ export const updateTaskStatus = async (projectId: string, taskId: string, status
   if (!record || record.projectId !== projectId) {
     return null;
   }
+  if (MANUAL_LOCKED_TASK_STATUSES.has(record.status) || MANUAL_LOCKED_TASK_STATUSES.has(status)) {
+    return null;
+  }
+  if (record.artifactId && await hasOpenReviewState(record.artifactId)) {
+    return null;
+  }
 
   const nextTask = transitionTask(serializeTask(record), status, `Task moved to ${status.replaceAll("_", " ").toLowerCase()} from the command center.`);
   await upsertTaskRecord(projectId, nextTask);
@@ -670,36 +689,31 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
   });
   const taskRecord = await prisma.task.findUnique({ where: { id: taskId } });
 
-  if (!project || !project.companyProfile || !taskRecord) {
+  if (!project || !project.companyProfile || !taskRecord || taskRecord.projectId !== projectId) {
     return null;
   }
-
+  if (!EXECUTABLE_TASK_STATUSES.has(taskRecord.status) || !EXECUTABLE_TASK_TYPES.has(taskRecord.type) || taskRecord.artifactId) {
+    return null;
+  }
   const configuration = await getWorkspaceConfiguration(projectId);
   const persistedProviders = await prisma.executionProviderConfig.findMany({
     where: { workspaceId: project.workspaceId },
     orderBy: { updatedAt: "desc" }
   });
-  const persistedActiveProvider = configuration?.execution_provider.active_provider
-    ? persistedProviders.find((provider) => provider.providerKey === configuration.execution_provider.active_provider)
+  const preferredConfiguredProvider = configuration?.execution_provider.active_provider
+    ? persistedProviders.find((provider) => provider.providerKey === configuration.execution_provider.active_provider && provider.status === "CONFIGURED")
     : null;
-  const configuredProvider = configuration?.execution_provider.providers.find((provider) => provider.key === configuration.execution_provider.active_provider)
-    ?? configuration?.execution_provider.providers.find((provider) => provider.is_default)
-    ?? null;
-  const configuredPersistedProvider = persistedProviders.find((provider) => provider.status === "CONFIGURED") ?? null;
-  const fallbackPersistedProvider = configuredPersistedProvider
-    ? {
-        key: configuredPersistedProvider.providerKey,
-        name: configuredPersistedProvider.label,
-        is_default: true
-      }
-    : null;
-  const activeProvider = persistedActiveProvider
-    ? {
-        key: persistedActiveProvider.providerKey,
-        name: persistedActiveProvider.label,
-        is_default: persistedActiveProvider.providerKey === (configuration?.execution_provider.active_provider ?? persistedActiveProvider.providerKey)
-      }
-    : configuredProvider ?? fallbackPersistedProvider ?? defaultExecutionProviders().providers[0];
+  const fallbackConfiguredProvider = persistedProviders.find((provider) => provider.status === "CONFIGURED") ?? null;
+  const providerRecord = preferredConfiguredProvider ?? fallbackConfiguredProvider;
+  if (!providerRecord) {
+    return null;
+  }
+
+  const activeProvider = {
+    key: providerRecord.providerKey,
+    name: providerRecord.label,
+    is_default: providerRecord.providerKey === (configuration?.execution_provider.active_provider ?? providerRecord.providerKey)
+  };
   const executionJob = await prisma.executionJob.create({
     data: {
       id: nanoid(),
@@ -823,6 +837,18 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
 
 export const decideApproval = async (approvalId: string, decision: "APPROVED" | "REJECTED", note?: string, decidedBy = DEFAULT_COMMENT_AUTHOR) => {
   const normalizedNote = note?.trim();
+  const currentApproval = await prisma.approval.findUnique({
+    where: { id: approvalId },
+    include: {
+      project: true,
+      artifact: true,
+      revision: true
+    }
+  });
+  if (!currentApproval || currentApproval.status !== "PENDING") {
+    return null;
+  }
+
   const approval = await prisma.approval.update({
     where: { id: approvalId },
     data: {

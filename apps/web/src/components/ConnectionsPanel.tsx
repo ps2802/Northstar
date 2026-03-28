@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import type { ExecutionProvider, FounderIntake, FounderSession, Integration } from '../lib/types';
+import type { ExecutionProvider, FounderIntake, Integration, WorkspaceTruth } from '../lib/types';
 
 interface ConnectionsPanelProps {
   activeProviderId: string;
   connectErrorById: Record<string, string>;
   executionProviders: ExecutionProvider[];
   founderIntake: FounderIntake | null;
-  founderSession: FounderSession | null;
   integrations: Integration[];
   pendingConnectId?: string | null;
   pendingDisconnectId?: string | null;
@@ -14,6 +13,7 @@ interface ConnectionsPanelProps {
   pendingProviderConnectId?: string | null;
   pendingSyncId?: string | null;
   providerErrorById: Record<string, string>;
+  workspaceTruth: WorkspaceTruth;
   onConnect: (integrationId: string, credential?: string) => Promise<boolean>;
   onDisconnect: (integrationId: string) => Promise<boolean>;
   onProviderActivate: (providerId: string) => Promise<boolean>;
@@ -22,15 +22,35 @@ interface ConnectionsPanelProps {
 }
 
 const integrationStatusLabel: Record<Integration['status'], string> = {
-  connected: 'Connected',
-  needs_key: 'Needs key',
-  planned: 'Planned',
+  connected: 'Saved, unverified',
+  needs_key: 'Credential required',
+  planned: 'Not set up',
 };
 
 const providerStatusLabel: Record<ExecutionProvider['status'], string> = {
-  connected: 'Connected',
-  needs_key: 'Needs key',
-  available: 'Available',
+  connected: 'Saved, unverified',
+  needs_key: 'Key required',
+  available: 'Local only',
+};
+
+const getReadOnlyNotice = (workspaceTruth: WorkspaceTruth) => {
+  if (workspaceTruth.source === 'cached') {
+    return 'Cached stale workspace. Credential changes are disabled until a live founder session is restored.';
+  }
+
+  if (workspaceTruth.source === 'sample') {
+    return 'Sample workspace only. Credential changes are disabled here.';
+  }
+
+  if (workspaceTruth.understanding === 'fallback') {
+    return 'Fallback company understanding is still active. Credential changes stay read-only until founder context grounds this workspace.';
+  }
+
+  if (workspaceTruth.source === 'unauthenticated' || workspaceTruth.sessionState !== 'active') {
+    return 'No live founder session is active. Credential changes stay read-only until that is fixed.';
+  }
+
+  return null;
 };
 
 export function ConnectionsPanel({
@@ -38,7 +58,6 @@ export function ConnectionsPanel({
   connectErrorById,
   executionProviders,
   founderIntake,
-  founderSession,
   integrations,
   pendingConnectId,
   pendingDisconnectId,
@@ -46,6 +65,7 @@ export function ConnectionsPanel({
   pendingProviderConnectId,
   pendingSyncId,
   providerErrorById,
+  workspaceTruth,
   onConnect,
   onDisconnect,
   onProviderActivate,
@@ -54,37 +74,46 @@ export function ConnectionsPanel({
 }: ConnectionsPanelProps) {
   const [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({});
   const [integrationSecrets, setIntegrationSecrets] = useState<Record<string, string>>({});
+  const mutationsLocked = !workspaceTruth.riskyMutationsAllowed;
+  const readOnlyNotice = getReadOnlyNotice(workspaceTruth);
+  const savedProviderCount = executionProviders.filter((provider) => provider.status === 'connected').length;
+  const savedIntegrationCount = integrations.filter((integration) => integration.status === 'connected').length;
+  const sessionLabel = workspaceTruth.sessionState === 'active'
+    ? workspaceTruth.session?.email ?? workspaceTruth.session?.name ?? 'Live founder session'
+    : 'Not live';
 
   return (
     <section className="rail-card connections-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Connections</p>
-          <h2>Integrations and execution engines</h2>
+          <h2>Saved credentials and execution preferences</h2>
         </div>
       </div>
 
       <p className="summary-copy">
-        Northstar should connect to the tools the founder already uses, then turn those signals into GTM, SEO, outreach, CRM, and approval work.
+        This surface only shows what has been saved in the workspace. Saved credentials do not mean the underlying tool has been validated.
       </p>
 
+      {readOnlyNotice ? <div className="connection-honesty-banner">{readOnlyNotice}</div> : null}
+
       <div className="connection-callout">
-        <span>Workspace access</span>
-        <strong>{founderSession?.displayName ?? founderIntake?.email ?? 'Founder session not configured'}</strong>
+        <span>Founder session</span>
+        <strong>{sessionLabel}</strong>
       </div>
 
       <div className="connection-callout connection-callout-secondary">
         <span>Priority channel</span>
-        <strong>{founderIntake?.keyChannel ?? 'SEO and founder-led content'}</strong>
+        <strong>{founderIntake?.keyChannel ?? 'Not provided yet'}</strong>
       </div>
 
       <section className="connection-section">
         <div className="connection-section-head">
           <div>
-            <p className="eyebrow">Execution engines</p>
-            <h3>Choose the provider Northstar should run through</h3>
+            <p className="eyebrow">Execution providers</p>
+            <h3>Choose the provider this workspace should prefer later</h3>
           </div>
-          <span className="domain-badge">{executionProviders.length} available</span>
+          <span className="domain-badge">{savedProviderCount} saved</span>
         </div>
 
         <div className="connection-grid">
@@ -92,6 +121,8 @@ export function ConnectionsPanel({
             const isConnecting = pendingProviderConnectId === provider.id;
             const isActivating = pendingProviderActivateId === provider.id;
             const providerSecret = providerSecrets[provider.id] ?? '';
+            const providerLocked = mutationsLocked || isConnecting;
+            const activationLocked = mutationsLocked || isActivating || (provider.authType === 'api_key' && provider.status !== 'connected');
 
             return (
               <article key={provider.id} className={`connection-card ${activeProviderId === provider.id ? 'connection-card-active' : ''}`}>
@@ -102,29 +133,33 @@ export function ConnectionsPanel({
                 <p>{provider.description}</p>
                 <p className="connection-card-caption">{provider.modelHint}</p>
                 {provider.maskedSecret ? <p className="connection-card-caption">Saved credential: {provider.maskedSecret}</p> : null}
+                {provider.status === 'connected' ? (
+                  <p className="connection-card-caption">Provider access is saved only. Validation is not shown in this founder UI yet.</p>
+                ) : null}
                 {providerErrorById[provider.id] ? <p className="inline-error">{providerErrorById[provider.id]}</p> : null}
 
                 {provider.authType === 'api_key' ? (
                   <label className="connection-field">
                     API key
                     <input
+                      disabled={providerLocked}
                       value={providerSecret}
                       onChange={(event) => setProviderSecrets((current) => ({ ...current, [provider.id]: event.target.value }))}
                       placeholder={`Paste ${provider.name} key`}
                     />
                   </label>
                 ) : (
-                  <p className="connection-card-caption">Use your current Northstar CLI setup and make it the active engine.</p>
+                  <p className="connection-card-caption">This local provider can be selected, but validation is still outside this founder UI.</p>
                 )}
 
                 <div className="connection-card-meta">
-                  <span>{provider.authType === 'api_key' ? 'API key' : 'CLI'}</span>
+                  <span>{provider.authType === 'api_key' ? 'API key' : 'Local provider'}</span>
                   <div className="connection-card-actions">
                     {provider.authType === 'api_key' ? (
                       <button
                         className="ghost-button"
                         type="button"
-                        disabled={isConnecting}
+                        disabled={providerLocked}
                         onClick={async () => {
                           const connected = await onProviderConnect(provider.id, providerSecret);
                           if (connected) {
@@ -132,18 +167,18 @@ export function ConnectionsPanel({
                           }
                         }}
                       >
-                        {isConnecting ? 'Saving...' : provider.status === 'connected' ? 'Update key' : 'Connect'}
+                        {isConnecting ? 'Saving...' : provider.status === 'connected' ? 'Update saved key' : 'Save key'}
                       </button>
                     ) : null}
                     <button
                       className="primary-button secondary"
                       type="button"
-                      disabled={isActivating || (provider.authType === 'api_key' && provider.status !== 'connected')}
+                      disabled={activationLocked}
                       onClick={async () => {
                         await onProviderActivate(provider.id);
                       }}
                     >
-                      {isActivating ? 'Activating...' : activeProviderId === provider.id ? 'Active provider' : 'Make active'}
+                      {isActivating ? 'Saving...' : activeProviderId === provider.id ? 'Preferred provider' : 'Use as preferred'}
                     </button>
                   </div>
                 </div>
@@ -156,10 +191,10 @@ export function ConnectionsPanel({
       <section className="connection-section">
         <div className="connection-section-head">
           <div>
-            <p className="eyebrow">Workflow integrations</p>
-            <h3>Connect the tools that unlock real execution</h3>
+            <p className="eyebrow">Workflow tools</p>
+            <h3>Saved access only until validation exists</h3>
           </div>
-          <span className="domain-badge">{integrations.filter((integration) => integration.status === 'connected').length} live</span>
+          <span className="domain-badge">{savedIntegrationCount} saved</span>
         </div>
 
         <div className="connection-grid">
@@ -168,6 +203,11 @@ export function ConnectionsPanel({
             const isDisconnecting = pendingDisconnectId === integration.id;
             const isSyncing = pendingSyncId === integration.id;
             const integrationSecret = integrationSecrets[integration.id] ?? '';
+            const connectionLocked = mutationsLocked || isConnecting;
+            const disconnectLocked = mutationsLocked || integration.status !== 'connected' || isDisconnecting;
+            const validationUnavailable = integration.status === 'connected'
+              ? `Validation for ${integration.name} is not available in this founder UI yet.`
+              : `Save ${integration.name} first before validation can exist.`;
 
             return (
               <article key={integration.id} className={`connection-card ${integration.status === 'connected' ? 'connection-card-active' : ''}`}>
@@ -176,13 +216,17 @@ export function ConnectionsPanel({
                   <span className="domain-badge">{integrationStatusLabel[integration.status]}</span>
                 </div>
                 <p>{integration.description}</p>
-                <p className="connection-card-caption">{integration.connectedAs ?? integration.credentialLabel}</p>
+                <p className="connection-card-caption">
+                  {integration.maskedSecret ? 'Credential saved locally.' : integration.credentialLabel}
+                </p>
                 {integration.maskedSecret ? <p className="connection-card-caption">Saved credential: {integration.maskedSecret}</p> : null}
+                {integration.status === 'connected' ? <p className="connection-card-caption">{validationUnavailable}</p> : null}
                 {connectErrorById[integration.id] ? <p className="inline-error">{connectErrorById[integration.id]}</p> : null}
 
                 <label className="connection-field">
                   {integration.credentialLabel}
                   <input
+                    disabled={connectionLocked}
                     value={integrationSecret}
                     onChange={(event) => setIntegrationSecrets((current) => ({ ...current, [integration.id]: event.target.value }))}
                     placeholder={`Paste ${integration.credentialLabel.toLowerCase()}`}
@@ -195,7 +239,7 @@ export function ConnectionsPanel({
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled={isConnecting}
+                      disabled={connectionLocked}
                       onClick={async () => {
                         const connected = await onConnect(integration.id, integrationSecret);
                         if (connected) {
@@ -203,27 +247,28 @@ export function ConnectionsPanel({
                         }
                       }}
                     >
-                      {isConnecting ? 'Connecting...' : integration.status === 'connected' ? 'Update access' : 'Connect'}
+                      {isConnecting ? 'Saving...' : integration.status === 'connected' ? 'Update saved access' : 'Save access'}
                     </button>
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled={integration.status !== 'connected' || isSyncing}
+                      disabled
+                      title={validationUnavailable}
                       onClick={async () => {
                         await onSync(integration.id);
                       }}
                     >
-                      {isSyncing ? 'Syncing...' : 'Sync now'}
+                      {isSyncing ? 'Checking...' : 'Validation unavailable'}
                     </button>
                     <button
                       className="ghost-button danger-button"
                       type="button"
-                      disabled={integration.status !== 'connected' || isDisconnecting}
+                      disabled={disconnectLocked}
                       onClick={async () => {
                         await onDisconnect(integration.id);
                       }}
                     >
-                      {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                      {isDisconnecting ? 'Removing...' : 'Remove saved access'}
                     </button>
                   </div>
                 </div>

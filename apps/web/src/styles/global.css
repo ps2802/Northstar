@@ -1856,6 +1856,8 @@ select:focus {
 .board-empty-state,
 .decision-config,
 .decision-provider-warning,
+.drawer-truth-banner,
+.connection-honesty-banner,
 .approval-subsection,
 .connection-summary-grid,
 .provider-grid,
@@ -1870,7 +1872,9 @@ select:focus {
 .draft-banner,
 .board-empty-state,
 .section-empty-state,
-.decision-provider-warning {
+.decision-provider-warning,
+.drawer-truth-banner,
+.connection-honesty-banner {
   padding: 16px 18px;
   border-radius: 18px;
   border: 1px solid rgba(16, 35, 68, 0.08);
@@ -2149,6 +2153,13 @@ select:focus {
   gap: 12px;
 }
 
+.workspace-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .workspace-topbar-actions {
   align-items: center;
   justify-content: flex-end;
@@ -2187,6 +2198,12 @@ select:focus {
   line-height: 1.55;
 }
 
+.workspace-status-banner-alert {
+  border-color: rgba(152, 59, 46, 0.18);
+  background: rgba(255, 244, 239, 0.9);
+  color: #7d3428;
+}
+
 .workspace-error-state {
   max-width: 720px;
   display: grid;
@@ -2219,6 +2236,26 @@ select:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.workspace-trust-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 35, 68, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--navy-soft);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-trust-chip-muted {
+  background: rgba(16, 35, 68, 0.06);
+  color: var(--muted);
 }
 
 .workspace-body {
@@ -2615,6 +2652,13 @@ select:focus {
   margin-top: 10px;
 }
 
+.connection-honesty-banner,
+.drawer-truth-banner {
+  background: rgba(255, 246, 238, 0.82);
+  border-color: rgba(217, 111, 74, 0.22);
+  color: #7d3428;
+}
+
 .approval-card-muted {
   background: rgba(255, 246, 238, 0.78);
 }
@@ -2659,6 +2703,11 @@ select:focus {
 
 .decision-provider-warning {
   background: rgba(255, 248, 235, 0.82);
+}
+
+.workspace-readonly-surface .task-lane-select {
+  pointer-events: none;
+  opacity: 0.56;
 }
 
 .owner-chip {

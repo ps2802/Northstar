@@ -9,6 +9,8 @@ interface ApprovalQueueProps {
   approvals: Approval[];
   artifacts: Artifact[];
   decisionErrorByTaskId: Record<string, string>;
+  disabledReason?: string | null;
+  mutationsAllowed?: boolean;
   pendingApproveTaskId?: string | null;
   pendingRejectTaskId?: string | null;
   tasks: Task[];
@@ -72,6 +74,8 @@ export function ApprovalQueue({
   approvals,
   artifacts,
   decisionErrorByTaskId,
+  disabledReason,
+  mutationsAllowed = true,
   pendingApproveTaskId,
   pendingRejectTaskId,
   tasks,
@@ -132,6 +136,7 @@ export function ApprovalQueue({
       </div>
 
       <div className="approval-list">
+        {!mutationsAllowed && disabledReason ? <div className="drawer-truth-banner">{disabledReason}</div> : null}
         {filteredRecords.length ? filteredRecords.map(({ approval, artifact, task }) => {
           const rationale = parseRationale(task.rationale);
           const whyItMatters = compactText(
@@ -176,7 +181,7 @@ export function ApprovalQueue({
                     <button
                       className="primary-button secondary"
                       type="button"
-                      disabled={isBusy}
+                      disabled={isBusy || !mutationsAllowed}
                       onClick={async () => {
                         await onApprove(task.id);
                       }}
@@ -186,7 +191,7 @@ export function ApprovalQueue({
                     <button
                       className="ghost-button danger-button"
                       type="button"
-                      disabled={isBusy}
+                      disabled={isBusy || !mutationsAllowed}
                       onClick={async () => {
                         await onReject(task.id);
                       }}

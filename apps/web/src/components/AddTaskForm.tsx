@@ -3,15 +3,17 @@ import { supportedManualTaskTypes } from '../lib/taskConfig';
 import type { NewTaskInput, TaskType } from '../lib/types';
 
 interface AddTaskFormProps {
+  disabledReason?: string | null;
   error?: string | null;
   loading?: boolean;
+  mutationsAllowed?: boolean;
   onAdd: (input: NewTaskInput) => Promise<boolean>;
 }
 
 const defaultInput: NewTaskInput = {
   title: '',
   description: '',
-  type: 'seo_audit',
+  type: 'blog_brief',
   impact: 6,
   effort: 6,
   confidence: 5,
@@ -19,16 +21,18 @@ const defaultInput: NewTaskInput = {
   owner_type: 'agent',
 };
 
-export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
+export function AddTaskForm({ disabledReason, error, loading, mutationsAllowed = true, onAdd }: AddTaskFormProps) {
   const [input, setInput] = useState<NewTaskInput>(defaultInput);
+  const formDisabled = loading || !mutationsAllowed;
+  const selectedTaskType = supportedManualTaskTypes.find((taskType) => taskType.value === input.type) ?? supportedManualTaskTypes[0];
 
   return (
     <details className="rail-card rail-details add-task-shell">
       <summary className="rail-details-summary">
         <div>
-          <p className="eyebrow">Founder override</p>
-          <h2>Queue manual work</h2>
-          <p className="panel-copy">Add work the founder cares about. Northstar will still score it, prioritize it, and decide whether to pick it up or defer it.</p>
+          <p className="eyebrow">Founder input</p>
+          <h2>Queue planning work</h2>
+          <p className="panel-copy">Only blog briefs can generate a live draft here. Other task types are planning-only placeholders for manual follow-through.</p>
         </div>
       </summary>
 
@@ -48,10 +52,10 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
         <label>
           Title
           <input
-            disabled={loading}
+            disabled={formDisabled}
             value={input.title}
             onChange={(event) => setInput({ ...input, title: event.target.value })}
-            placeholder="Add a task Northstar should score"
+            placeholder="Add a task the board should track"
             required
           />
         </label>
@@ -59,7 +63,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
         <label>
           Founder context <span className="field-optional">Optional</span>
           <textarea
-            disabled={loading}
+            disabled={formDisabled}
             value={input.description ?? ''}
             onChange={(event) => setInput({ ...input, description: event.target.value })}
             rows={4}
@@ -71,12 +75,14 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Type
             <select
-              disabled={loading}
+              disabled={formDisabled}
               value={input.type}
               onChange={(event) => setInput({ ...input, type: event.target.value as TaskType })}
             >
               {supportedManualTaskTypes.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+                <option key={type.value} value={type.value}>
+                  {type.label} {type.availability === 'live' ? '(live draft path)' : '(planning only)'}
+                </option>
               ))}
             </select>
           </label>
@@ -84,7 +90,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Owner
             <select
-              disabled={loading}
+              disabled={formDisabled}
               value={input.owner_type}
               onChange={(event) => setInput({ ...input, owner_type: event.target.value as NewTaskInput['owner_type'] })}
             >
@@ -99,7 +105,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Impact
             <input
-              disabled={loading}
+              disabled={formDisabled}
               type="number"
               min={1}
               max={10}
@@ -110,7 +116,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Effort
             <input
-              disabled={loading}
+              disabled={formDisabled}
               type="number"
               min={1}
               max={10}
@@ -121,7 +127,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Confidence
             <input
-              disabled={loading}
+              disabled={formDisabled}
               type="number"
               min={1}
               max={10}
@@ -132,7 +138,7 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           <label>
             Goal fit
             <input
-              disabled={loading}
+              disabled={formDisabled}
               type="number"
               min={1}
               max={10}
@@ -142,11 +148,16 @@ export function AddTaskForm({ error, loading, onAdd }: AddTaskFormProps) {
           </label>
         </div>
 
-        <p className="hint">Manual work enters the same operating model: rationale, priority score, owner, and board placement.</p>
+        {!mutationsAllowed && disabledReason ? <p className="form-error">{disabledReason}</p> : null}
+        {selectedTaskType.availability === 'live' ? (
+          <p className="hint">This adds a blog brief task that can later generate a founder-review draft.</p>
+        ) : (
+          <p className="hint">This task type stays planning-only in the current founder UI. It can be prioritized and discussed, but not generated.</p>
+        )}
         {error ? <p className="form-error">{error}</p> : null}
 
-        <button className="primary-button" type="submit" disabled={loading}>
-          {loading ? 'Adding to board...' : 'Add to inbox'}
+        <button className="primary-button" type="submit" disabled={formDisabled}>
+          {loading ? 'Adding to board...' : selectedTaskType.availability === 'live' ? 'Add blog brief task' : 'Add planning task'}
         </button>
       </form>
     </details>

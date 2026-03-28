@@ -4,21 +4,15 @@ Northstar is a board-first operating system for non-technical founders.
 
 A founder connects a website, adds business context, answers follow-up questions, and lands in a dashboard where Northstar separates agent work from founder work. The Kanban board is the main product surface.
 
-## Current launch assumptions
+## Current product truth
 
-- Launch target: early founder pilot with strong demo readiness
-- Product shape: single-founder-first, board-first, approval-first
-- Human control: nothing is sent, published, or finalized without founder review
-- Non-goals for this launch: autonomous publishing, WhatsApp/Telegram adapters, team collaboration
-
-## Wave status
-
-### Wave 1 / 2 audit truth
-
-- Northstar now reads itself and pilot companies correctly as a founder operating system instead of drifting into QA or generic B2B language.
-- Task rationale is now explicit about why a task exists, why it has its current priority, and what business outcome it supports.
-- The founder-OS shell is real: staged intake, dashboard re-entry, left nav, approvals, founder-vs-Northstar framing, and board movement history are implemented.
-- Audit quality still depends on lightweight site ingestion, README/repo signal, and rules/templates, so company understanding can still drift if source inputs are weak.
+- Northstar is a strong demo and a promising internal alpha. It is not yet a strong external v1.
+- The board is the main product surface. Founder review stays in the loop before anything moves forward.
+- `blog_brief` is the only live generation path exposed in the founder product. Other task types are planning-only in this build.
+- Founder access now uses server-issued workspace sessions tied to founder email plus workspace website, not a local founder-session toggle.
+- Connection state is stored as saved workspace state, not as validated downstream truth.
+- Sample, cached stale, fallback understanding, and incomplete context states are explicitly marked in the UI.
+- All non-health product routes require a founder session header. Public bootstrap is limited to onboarding and founder access restoration.
 
 Audit references:
 
@@ -27,72 +21,25 @@ Audit references:
 - [`docs/audits/GRIDLOCK_CALIBRATION.md`](./docs/audits/GRIDLOCK_CALIBRATION.md)
 - [`docs/audits/NIGHTWATCH_QA_CALIBRATION.md`](./docs/audits/NIGHTWATCH_QA_CALIBRATION.md)
 
-### Wave 3: platform foundation
-
-Implemented:
-
-- Postgres-backed Prisma schema and checked-in migrations
-- persisted founder intake and planning context
-- local workspace sessions with persisted tokens
-- execution provider config and active-provider switching
-- integration connection records with connect, sync, and disconnect state
-- approval decisions, revision requests/submissions, task comments, and execution-job records
-- live API-backed onboarding, task updates, approvals, revisions, and provider/integration settings
-
-Still remaining:
-
-- real Google/email auth instead of the local session foundation
-- provider-backed execution for the currently supported asset types
-- external credential validation and real downstream delivery
-- separate worker/retry daemon for queued execution jobs
-
-### Wave 4: CRM and research
-
-Implemented:
-
-- CRM and research surfaces in the dashboard shell
-- CRM/research task categories and seeded demo data
-- research, outreach, and CRM execution direction in the command center
-
-Still remaining:
-
-- real CRM contact persistence in the product flow
-- real research note capture and synthesis persistence
-- send tracking, reply handling, and live outreach execution
-
-### Wave 5: hardening and launch
-
-Implemented:
-
-- Vercel deployment path with hosted Postgres
-- Prisma deploy flow for production builds
-- deployment and demo runbooks
-- live API validation for onboarding, manual tasks, asset generation, approvals, and comments
-
-Still remaining:
-
-- real workspace ownership and secure isolation through auth
-- observability and failure handling beyond basic job status records
-- final pilot QA pass across Northstar, Moongate, Gridlock, and Nightwatch QA
-
 ## What works today
 
 - staged website onboarding with founder follow-up questions
 - company summary, ICP inference, opportunity detection, and seed task generation
 - priority scoring with rationale-rich tasks
-- board, Northstar, founder, approvals, and connections surfaces
+- board, approvals, connections, analytics summary, and settings surfaces
 - manual task creation, task comments, and movement history
-- v1 draft generation for `blog_brief`, social post sets, and founder-facing copy suggestions
+- live draft generation for `blog_brief`
 - approval and rejection flow with revision notes and reruns
-- provider setup, integration setup, and persisted workspace configuration
+- onboarding can restore an existing workspace session before creating a duplicate workspace
+- provider setup, integration setup, and persisted workspace configuration with masked display fields
 - demo CRM and research panels
 
 ## What is still mocked or weak
 
 - execution still runs through `MockFounderExecutor`
-- unsupported task types block instead of executing
-- auth is not real identity yet
-- many integrations persist connection state but do not deliver real downstream work
+- every task type except `blog_brief` is planning-only
+- stronger verified identity flows like OAuth or magic-link email auth are still not present
+- many integrations persist saved access state but do not validate or deliver real downstream work
 - CRM/research panels are still demo-grade rather than end-to-end live workflows
 
 ## Repo layout
