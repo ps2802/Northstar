@@ -17,6 +17,15 @@ export interface ExecutorContract {
   ): { nextTask: Task; artifact?: Artifact };
 }
 
+export interface ProviderBackedExecutionOptions {
+  providerKey: "openai";
+  providerLabel: string;
+  revisionNote?: string;
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 export class FounderPlanner implements PlannerContract {
   evaluate(task: Task) {
     return evaluateTaskForExecution(task);
@@ -123,6 +132,116 @@ const buildBlogBrief = (task: Task, companySummary: string, guessedIcp: string, 
 
   return buildGenericBrief(task, companySummary, guessedIcp, revisionNote);
 };
+
+const createBlogBriefPrompt = (task: Task, companySummary: string, guessedIcp: string, revisionNote?: string) => [
+  "Write a founder-usable blog brief in markdown.",
+  "The brief should be concrete, opinionated, and ready for founder review.",
+  "Avoid generic content-marketing filler and avoid saying you are an AI.",
+  "",
+  "Use this planning scaffold:",
+  buildBlogBrief(task, companySummary, guessedIcp, revisionNote),
+].join("\n");
+
+const readOpenAIText = (payload: unknown): string | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as {
+    output_text?: string;
+    choices?: Array<{
+      message?: {
+        content?: string | Array<{ type?: string; text?: string }>;
+      };
+    }>;
+  };
+
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
+    return record.output_text.trim();
+  }
+
+  const firstChoice = record.choices?.[0]?.message?.content;
+  if (typeof firstChoice === "string" && firstChoice.trim()) {
+    return firstChoice.trim();
+  }
+
+  if (Array.isArray(firstChoice)) {
+    const text = firstChoice
+      .map((entry) => entry?.text?.trim())
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+    return text || null;
+  }
+
+  return null;
+};
+
+export class ProviderBackedBlogBriefExecutor {
+  async run(task: Task, companySummary: string, guessedIcp: string, options: ProviderBackedExecutionOptions): Promise<{ nextTask: Task; artifact?: Artifact }> {
+    if (task.type !== "BLOG_BRIEF") {
+      return {
+        nextTask: transitionTask(task, "BLOCKED", "Provider-backed execution only supports blog briefs in this workspace.")
+      };
+    }
+
+    const response = await fetch(`${options.baseUrl ?? "https://api.openai.com"}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: options.model ?? "gpt-4.1-mini",
+        temperature: 0.4,
+        messages: [
+          {
+            role: "system",
+            content: "You write sharp founder-facing blog briefs. Return only the final markdown brief."
+          },
+          {
+            role: "user",
+            content: createBlogBriefPrompt(task, companySummary, guessedIcp, options.revisionNote)
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI generation failed: ${response.status} ${errorText}`.slice(0, 600));
+    }
+
+    const payload = await response.json();
+    const content = readOpenAIText(payload);
+    if (!content) {
+      throw new Error("OpenAI generation returned no usable brief content.");
+    }
+
+    const artifact: Artifact = {
+      id: `${task.id}-artifact`,
+      project_id: task.project_id,
+      type: "BLOG_BRIEF",
+      title: `${task.title} - Brief`,
+      content: [
+        `> Generated via ${options.providerLabel}`,
+        "",
+        content,
+      ].join("\n"),
+      status: "WAITING_FOR_APPROVAL",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    return {
+      nextTask: {
+        ...transitionTask(task, "WAITING_FOR_APPROVAL", `Generated blog brief through ${options.providerLabel} and routed it into the approval queue.`),
+        artifact_id: artifact.id
+      },
+      artifact
+    };
+  }
+}
 
 const buildSocialPostSet = (task: Task, companySummary: string, guessedIcp: string): string => {
   const channel = task.type === "LINKEDIN_POST_SET" ? "LinkedIn" : "X";

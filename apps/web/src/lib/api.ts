@@ -580,6 +580,24 @@ const getDefaultIntegrations = (): Integration[] => clone(demoState.integrations
 
 const getDefaultAgentToolWrappers = (): AgentToolWrapper[] => clone(defaultAgentToolWrappers());
 const getDefaultWorkspaceLearning = (): WorkspaceLearning => clone(demoState.workspaceLearning);
+const getProviderDefaultModel = (providerId: string) => {
+  switch (providerId) {
+    case "openai":
+      return "gpt-4.1-mini";
+    case "anthropic":
+      return "claude-3-7-sonnet-latest";
+    default:
+      return undefined;
+  }
+};
+const getProviderBaseUrl = (providerId: string) => {
+  switch (providerId) {
+    case "openai":
+      return "https://api.openai.com";
+    default:
+      return undefined;
+  }
+};
 
 const createCachedFallbackState = (): AppState => ({
   ...clone(demoState),
@@ -1538,6 +1556,20 @@ export const createFounderApi = (): FounderApi => ({
 
     if (provider.authType === "api_key" && !credential?.trim()) {
       throw createMutationError(`Add an API key before connecting ${provider.name}.`);
+    }
+
+    if (provider.authType === "api_key") {
+      await fetchJson(`/workspaces/${latestState.project.workspaceId}/providers/${provider.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          label: provider.name,
+          auth_type: provider.authType,
+          status: "CONFIGURED",
+          base_url: getProviderBaseUrl(provider.id),
+          default_model: getProviderDefaultModel(provider.id),
+          api_key: credential?.trim(),
+        })
+      });
     }
 
     const connectedAt = new Date().toISOString();

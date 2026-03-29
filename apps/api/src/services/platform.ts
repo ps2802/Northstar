@@ -272,6 +272,7 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
   status?: ProviderSetupStatus;
   base_url?: string;
   default_model?: string;
+  api_key?: string;
   scopes?: string[];
   last_error?: string;
 }) => {
@@ -281,6 +282,18 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
   }
 
   const nextStatus = input.status ?? "CONFIGURED";
+  const existing = await prisma.executionProviderConfig.findUnique({
+    where: {
+      workspaceId_providerKey: {
+        workspaceId,
+        providerKey
+      }
+    }
+  });
+  const existingConfig = existing?.configJson ? JSON.parse(existing.configJson) as Record<string, unknown> : {};
+  const nextConfig = input.api_key?.trim()
+    ? { ...existingConfig, api_key: input.api_key.trim() }
+    : existingConfig;
 
   const provider = await prisma.executionProviderConfig.upsert({
     where: {
@@ -296,6 +309,7 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
       baseUrl: input.base_url?.trim() || null,
       defaultModel: input.default_model?.trim() || null,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
+      configJson: Object.keys(nextConfig).length ? JSON.stringify(nextConfig) : null,
       lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     },
@@ -309,6 +323,7 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
       baseUrl: input.base_url?.trim() || null,
       defaultModel: input.default_model?.trim() || null,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
+      configJson: Object.keys(nextConfig).length ? JSON.stringify(nextConfig) : null,
       lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     }
