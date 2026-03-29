@@ -1,0 +1,117 @@
+import type { AgentToolWrapper } from './types';
+
+const now = () => new Date().toISOString();
+
+export const defaultAgentToolWrappers = (): AgentToolWrapper[] => [
+  {
+    id: 'communication_identity',
+    label: 'Communication and identity',
+    objective: 'Give Northstar agent-facing email, phone, and messaging rails so execution can look like a real operator workflow.',
+    selectedVendorId: 'agentmail',
+    updatedAt: now(),
+    vendors: [
+      { id: 'agentmail', name: 'AgentMail', tagline: 'Agent email accounts' },
+      { id: 'agentphone', name: 'AgentPhone', tagline: 'Agent phone numbers' },
+      { id: 'kapso', name: 'Kapso', tagline: 'WhatsApp numbers for agents', url: 'https://kapso.ai/' },
+      { id: 'lobstermail', name: 'LobsterMail', tagline: 'Agent inbox infrastructure', url: 'https://lobstermail.ai/' },
+      { id: 'convos', name: 'Convos', tagline: 'Conversation rails', url: 'https://convos.org/' },
+      { id: 'esim_dog', name: 'eSIM for AI Agents', tagline: 'eSIM access for agents', url: 'https://esim.dog/ai-agents' },
+    ],
+  },
+  {
+    id: 'compute_execution',
+    label: 'Compute and execution',
+    objective: 'Give Northstar a real machine or sandbox to run tasks, scripts, and job workers outside the founder UI.',
+    selectedVendorId: 'daytona',
+    updatedAt: now(),
+    vendors: [
+      { id: 'daytona', name: 'Daytona', tagline: 'Managed agent computers' },
+      { id: 'e2b', name: 'E2B', tagline: 'Cloud sandboxes for agents' },
+      { id: 'gooseworks', name: 'Gooseworks', tagline: 'Agent runtime environment', url: 'https://gooseworks.ai/' },
+      { id: 'run402', name: 'Run402', tagline: 'Remote execution runtime', url: 'https://run402.com/' },
+      { id: 'pinchtab', name: 'PinchTab', tagline: 'Open-source desktop control', url: 'https://github.com/pinchtab/pinchtab' },
+    ],
+  },
+  {
+    id: 'browser_web_actions',
+    label: 'Browser and web actions',
+    objective: 'Let Northstar browse, click, crawl, and collect web state without pretending static website ingestion is enough.',
+    selectedVendorId: 'browserbase',
+    updatedAt: now(),
+    vendors: [
+      { id: 'browserbase', name: 'Browserbase', tagline: 'Hosted browser sessions' },
+      { id: 'browser_use', name: 'Browser Use', tagline: 'Browser control library', url: 'https://github.com/browser-use/browser-use' },
+      { id: 'hyperbrowser', name: 'Hyperbrowser', tagline: 'Browser automation for agents' },
+      { id: 'firecrawl', name: 'Firecrawl', tagline: 'High-signal crawl and scrape' },
+      { id: 'notte', name: 'Notte', tagline: 'Browser action workflows', url: 'https://www.notte.cc/' },
+    ],
+  },
+  {
+    id: 'search_research',
+    label: 'Search and research',
+    objective: 'Make Northstar better at finding companies, people, and market context than the current generic crawl-plus-summary path.',
+    selectedVendorId: 'exa',
+    updatedAt: now(),
+    vendors: [
+      { id: 'exa', name: 'Exa', tagline: 'Agent-native web search' },
+      { id: 'sixtyfour', name: 'Sixtyfour', tagline: 'People and company search' },
+      { id: 'outstand', name: 'Outstand', tagline: 'Research workflows', url: 'https://www.outstand.so/' },
+      { id: 'worldbook', name: 'Worldbook', tagline: 'Research corpus access', url: 'https://worldbook.it.com/' },
+    ],
+  },
+  {
+    id: 'memory_knowledge',
+    label: 'Memory and knowledge',
+    objective: 'Give Northstar durable memory and retrieval so campaigns, research, and founder context stop resetting every session.',
+    selectedVendorId: 'mem0',
+    updatedAt: now(),
+    vendors: [
+      { id: 'mem0', name: 'Mem0', tagline: 'Agent memory' },
+      { id: 'mem9', name: 'Mem9', tagline: 'Long-term memory', url: 'https://mem9.ai/' },
+      { id: 'supermemory', name: 'Supermemory', tagline: 'Context retrieval', url: 'https://supermemory.ai/' },
+      { id: 'claude_mem', name: 'Claude Mem', tagline: 'Open memory layer', url: 'https://github.com/thedotmack/claude-mem' },
+      { id: 'lightrag', name: 'LightRAG', tagline: 'RAG memory graph', url: 'https://github.com/HKUDS/LightRAG' },
+      { id: 'context_hub', name: 'Context Hub', tagline: 'Shared context server', url: 'https://github.com/andrewyng/context-hub' },
+      { id: 'airweave', name: 'Airweave', tagline: 'Context and memory fabric', url: 'https://airweave.ai/' },
+    ],
+  },
+  {
+    id: 'payments_transactions',
+    label: 'Payments and transactions',
+    objective: 'Let Northstar eventually pay for execution and external actions without hardcoding billing logic into the product core.',
+    selectedVendorId: 'kite',
+    updatedAt: now(),
+    vendors: [
+      { id: 'kite', name: 'Kite', tagline: 'Payments for agents' },
+      { id: 'sponge', name: 'Sponge', tagline: 'Transaction rails', url: 'https://www.paysponge.com/' },
+    ],
+  },
+  {
+    id: 'saas_api_access',
+    label: 'SaaS and API access',
+    objective: 'Turn Northstar’s saved integrations into a real action layer across CRM, support, productivity, and campaign tooling.',
+    selectedVendorId: 'composio',
+    updatedAt: now(),
+    vendors: [
+      { id: 'composio', name: 'Composio', tagline: 'SaaS tool access for agents' },
+      { id: 'orthogonal', name: 'Orthogonal', tagline: 'API access abstraction' },
+      { id: 'integuru', name: 'Integuru', tagline: 'Integration builder', url: 'https://www.integuru.ai/' },
+      { id: 'anakin', name: 'Anakin', tagline: 'Workflow automation', url: 'https://anakin.io/' },
+      { id: 'communa', name: 'Communa', tagline: 'API connectors', url: 'https://communa.io/' },
+      { id: 'strata', name: 'Strata', tagline: 'Agent API platform', url: 'https://getstrata.ai/' },
+      { id: 'overloop_cli', name: 'Overloop CLI', tagline: 'Outbound automation', url: 'https://github.com/sortlist/overloop-cli/' },
+      { id: 'gstack', name: 'GStack', tagline: 'Open agent stack', url: 'https://github.com/garrytan/gstack' },
+    ],
+  },
+  {
+    id: 'voice_layer',
+    label: 'Voice layer',
+    objective: 'Give Northstar a voice surface for calls, voice agents, and spoken founder workflows without changing the product shell.',
+    selectedVendorId: 'elevenlabs',
+    updatedAt: now(),
+    vendors: [
+      { id: 'elevenlabs', name: 'ElevenLabs', tagline: 'Voice generation' },
+      { id: 'vapi', name: 'Vapi', tagline: 'Voice workflows' },
+    ],
+  },
+];

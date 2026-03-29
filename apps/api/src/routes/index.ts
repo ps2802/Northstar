@@ -133,7 +133,31 @@ const configurationSchema = z.object({
     masked_secret: z.string().trim().optional(),
     connected_at: z.string().trim().optional(),
     last_sync_at: z.string().trim().optional()
-  })).optional()
+  })).optional(),
+  agent_stack: z.object({
+    wrappers: z.array(z.object({
+      key: z.enum([
+        "communication_identity",
+        "compute_execution",
+        "browser_web_actions",
+        "search_research",
+        "memory_knowledge",
+        "payments_transactions",
+        "saas_api_access",
+        "voice_layer"
+      ]),
+      label: z.string().trim().min(1),
+      objective: z.string().trim().min(1),
+      selected_vendor_key: z.string().trim().min(1).optional(),
+      updated_at: z.string().trim().min(1),
+      vendors: z.array(z.object({
+        key: z.string().trim().min(1),
+        name: z.string().trim().min(1),
+        tagline: z.string().trim().min(1),
+        url: z.string().trim().url().optional()
+      })).min(1)
+    })).min(1)
+  }).optional()
 });
 
 declare module "fastify" {

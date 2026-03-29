@@ -56,6 +56,12 @@ test('board-first shell renders from cached state and keeps core routes reachabl
   await expect(page.getByText('Approval turnaround')).toBeVisible();
 
   await openNav(page, 'Settings');
+  await page.getByRole('button', { name: 'Open connections' }).click();
+  await expect(page.getByRole('heading', { name: 'Preferred wrapper by capability' })).toBeVisible();
+  await expect(page.getByText('Communication and identity')).toBeVisible();
+
+  await openNav(page, 'Settings');
   await expect(page.getByRole('heading', { name: 'Workspace context' })).toBeVisible();
   await expect(page.getByText('Credential truth')).toBeVisible();
+  await expect(page.getByText(/learned preferences/i)).toBeVisible();
 });

@@ -9,6 +9,9 @@ export interface FounderIntakeInput {
   answers?: Record<string, string>;
 }
 
+const FEEDBACK_PREFERENCES_KEY = "feedback_preferences";
+const FEEDBACK_LATEST_NOTE_KEY = "feedback_latest_note";
+
 const STOP_WORDS = new Set([
   "about",
   "after",
@@ -58,6 +61,19 @@ export const normalizeFounderIntakeInput = (input: FounderIntakeInput) => ({
   answers: normalizeAnswers(input.answers)
 });
 
+const parsePreferenceList = (value?: string) =>
+  (value ?? "")
+    .split("|")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const collectFeedbackPreferences = (feedback: string) =>
+  feedback
+    .split(/\n|[.;]+/g)
+    .map((entry) => entry.replace(/\s+/g, " ").trim())
+    .filter((entry) => entry.length >= 12 && entry.length <= 140)
+    .slice(0, 4);
+
 const toFounderIntakeInput = (input: FounderIntakeInput | FounderIntake): FounderIntakeInput => ({
   founder_name: input.founder_name ?? undefined,
   founder_email: input.founder_email ?? undefined,
@@ -66,6 +82,29 @@ const toFounderIntakeInput = (input: FounderIntakeInput | FounderIntake): Founde
   initiatives: input.initiatives,
   answers: input.answers
 });
+
+export const mergeFounderFeedback = (input: FounderIntakeInput | FounderIntake, feedback: string): FounderIntakeInput => {
+  const normalized = normalizeFounderIntakeInput(toFounderIntakeInput(input));
+  const note = feedback.trim();
+  if (!note) {
+    return normalized;
+  }
+
+  const existingPreferences = parsePreferenceList(normalized.answers[FEEDBACK_PREFERENCES_KEY]);
+  const nextPreferences = Array.from(new Set([
+    ...existingPreferences,
+    ...collectFeedbackPreferences(note)
+  ])).slice(0, 8);
+
+  return normalizeFounderIntakeInput({
+    ...normalized,
+    answers: {
+      ...normalized.answers,
+      [FEEDBACK_PREFERENCES_KEY]: nextPreferences.join(" | "),
+      [FEEDBACK_LATEST_NOTE_KEY]: note
+    }
+  });
+};
 
 export const buildPlanningContext = (input: FounderIntakeInput | FounderIntake) => {
   const normalized = normalizeFounderIntakeInput(toFounderIntakeInput(input));

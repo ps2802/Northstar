@@ -30,8 +30,10 @@ Audit references:
 - manual task creation, task comments, and movement history
 - live draft generation for `blog_brief`
 - approval and rejection flow with revision notes and reruns
+- founder comments, rejection notes, and revision requests now feed back into Northstar's planning context so future prioritization and revisions adapt
 - onboarding can restore an existing workspace session before creating a duplicate workspace
 - provider setup, integration setup, and persisted workspace configuration with masked display fields
+- agent-stack wrapper selection for identity, execution, browser, search, memory, payments, SaaS access, and voice
 - demo CRM and research panels
 
 ## What is still mocked or weak
@@ -40,6 +42,7 @@ Audit references:
 - every task type except `blog_brief` is planning-only
 - stronger verified identity flows like OAuth or magic-link email auth are still not present
 - many integrations persist saved access state but do not validate or deliver real downstream work
+- agent-stack wrappers are preference selections only, not live vendor integrations or validated capability rails
 - CRM/research panels are still demo-grade rather than end-to-end live workflows
 
 ## Repo layout

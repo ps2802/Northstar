@@ -3,7 +3,7 @@ import { MockFounderExecutor } from "@founder-os/agent-core";
 import { ingestWebsite } from "@founder-os/site-ingestion";
 import { createTaskFromInput, evaluateTaskForExecution, generateSeedTasks, sortTasksByPriority, transitionTask } from "@founder-os/task-engine";
 import type { TaskInput, TaskStatus } from "@founder-os/types";
-import { applyFounderContextToTask, buildPlanningContext } from "../lib/founder-intake.js";
+import { applyFounderContextToTask, buildPlanningContext, mergeFounderFeedback } from "../lib/founder-intake.js";
 import { prisma } from "../lib/prisma.js";
 import { serializeArtifact, serializeDashboard, serializeFounderIntake, serializeTask } from "../lib/serializers.js";
 import { createFallbackIngestion } from "./fallback.js";
@@ -55,6 +55,30 @@ type IntegrationConfig = {
   last_sync_at?: string;
 };
 
+type AgentToolVendorConfig = {
+  key: string;
+  name: string;
+  tagline: string;
+  url?: string;
+};
+
+type AgentToolWrapperConfig = {
+  key:
+    | "communication_identity"
+    | "compute_execution"
+    | "browser_web_actions"
+    | "search_research"
+    | "memory_knowledge"
+    | "payments_transactions"
+    | "saas_api_access"
+    | "voice_layer";
+  label: string;
+  objective: string;
+  selected_vendor_key?: string;
+  updated_at: string;
+  vendors: AgentToolVendorConfig[];
+};
+
 type WorkspaceConfiguration = {
   founder_intake?: FounderIntakePayload;
   execution_provider: {
@@ -62,6 +86,9 @@ type WorkspaceConfiguration = {
     providers: ExecutionProviderConfig[];
   };
   integrations: IntegrationConfig[];
+  agent_stack: {
+    wrappers: AgentToolWrapperConfig[];
+  };
   updated_at: string;
 };
 
@@ -191,6 +218,120 @@ const defaultIntegrations = (): IntegrationConfig[] => [
   }
 ];
 
+const defaultAgentToolWrappers = (): AgentToolWrapperConfig[] => [
+  {
+    key: "communication_identity",
+    label: "Communication and identity",
+    objective: "Give Northstar email, phone, and messaging rails so agents can operate like a real team.",
+    selected_vendor_key: "agentmail",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "agentmail", name: "AgentMail", tagline: "Agent email accounts" },
+      { key: "agentphone", name: "AgentPhone", tagline: "Agent phone numbers" },
+      { key: "kapso", name: "Kapso", tagline: "WhatsApp numbers", url: "https://kapso.ai/" },
+      { key: "lobstermail", name: "LobsterMail", tagline: "Agent inbox infrastructure", url: "https://lobstermail.ai/" },
+      { key: "convos", name: "Convos", tagline: "Conversation rails", url: "https://convos.org/" },
+      { key: "esim_dog", name: "eSIM for AI Agents", tagline: "eSIM access", url: "https://esim.dog/ai-agents" }
+    ]
+  },
+  {
+    key: "compute_execution",
+    label: "Compute and execution",
+    objective: "Give Northstar a machine or sandbox to run jobs outside the founder UI.",
+    selected_vendor_key: "daytona",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "daytona", name: "Daytona", tagline: "Managed agent computers" },
+      { key: "e2b", name: "E2B", tagline: "Cloud sandboxes" },
+      { key: "gooseworks", name: "Gooseworks", tagline: "Agent runtime", url: "https://gooseworks.ai/" },
+      { key: "run402", name: "Run402", tagline: "Remote execution runtime", url: "https://run402.com/" },
+      { key: "pinchtab", name: "PinchTab", tagline: "Desktop control", url: "https://github.com/pinchtab/pinchtab" }
+    ]
+  },
+  {
+    key: "browser_web_actions",
+    label: "Browser and web actions",
+    objective: "Let Northstar browse, click, and crawl the web with a real action layer.",
+    selected_vendor_key: "browserbase",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "browserbase", name: "Browserbase", tagline: "Hosted browser sessions" },
+      { key: "browser_use", name: "Browser Use", tagline: "Browser control library", url: "https://github.com/browser-use/browser-use" },
+      { key: "hyperbrowser", name: "Hyperbrowser", tagline: "Browser automation" },
+      { key: "firecrawl", name: "Firecrawl", tagline: "Web crawl and scrape" },
+      { key: "notte", name: "Notte", tagline: "Browser action workflows", url: "https://www.notte.cc/" }
+    ]
+  },
+  {
+    key: "search_research",
+    label: "Search and research",
+    objective: "Improve company, people, and market search beyond a static site crawl.",
+    selected_vendor_key: "exa",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "exa", name: "Exa", tagline: "Agent-native web search" },
+      { key: "sixtyfour", name: "Sixtyfour", tagline: "People and company search" },
+      { key: "outstand", name: "Outstand", tagline: "Research workflows", url: "https://www.outstand.so/" },
+      { key: "worldbook", name: "Worldbook", tagline: "Research corpus access", url: "https://worldbook.it.com/" }
+    ]
+  },
+  {
+    key: "memory_knowledge",
+    label: "Memory and knowledge",
+    objective: "Persist long-term context for campaigns, research, and founder intent.",
+    selected_vendor_key: "mem0",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "mem0", name: "Mem0", tagline: "Agent memory" },
+      { key: "mem9", name: "Mem9", tagline: "Long-term memory", url: "https://mem9.ai/" },
+      { key: "supermemory", name: "Supermemory", tagline: "Context retrieval", url: "https://supermemory.ai/" },
+      { key: "claude_mem", name: "Claude Mem", tagline: "Open memory layer", url: "https://github.com/thedotmack/claude-mem" },
+      { key: "lightrag", name: "LightRAG", tagline: "RAG memory graph", url: "https://github.com/HKUDS/LightRAG" },
+      { key: "context_hub", name: "Context Hub", tagline: "Shared context server", url: "https://github.com/andrewyng/context-hub" },
+      { key: "airweave", name: "Airweave", tagline: "Context and memory fabric", url: "https://airweave.ai/" }
+    ]
+  },
+  {
+    key: "payments_transactions",
+    label: "Payments and transactions",
+    objective: "Prepare Northstar for trusted agent transactions without billing logic in the core product.",
+    selected_vendor_key: "kite",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "kite", name: "Kite", tagline: "Payments for agents" },
+      { key: "sponge", name: "Sponge", tagline: "Transaction rails", url: "https://www.paysponge.com/" }
+    ]
+  },
+  {
+    key: "saas_api_access",
+    label: "SaaS and API access",
+    objective: "Turn saved integrations into a stronger action layer across the founder stack.",
+    selected_vendor_key: "composio",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "composio", name: "Composio", tagline: "SaaS tool access for agents" },
+      { key: "orthogonal", name: "Orthogonal", tagline: "API access abstraction" },
+      { key: "integuru", name: "Integuru", tagline: "Integration builder", url: "https://www.integuru.ai/" },
+      { key: "anakin", name: "Anakin", tagline: "Workflow automation", url: "https://anakin.io/" },
+      { key: "communa", name: "Communa", tagline: "API connectors", url: "https://communa.io/" },
+      { key: "strata", name: "Strata", tagline: "Agent API platform", url: "https://getstrata.ai/" },
+      { key: "overloop_cli", name: "Overloop CLI", tagline: "Outbound automation", url: "https://github.com/sortlist/overloop-cli/" },
+      { key: "gstack", name: "GStack", tagline: "Open agent stack", url: "https://github.com/garrytan/gstack" }
+    ]
+  },
+  {
+    key: "voice_layer",
+    label: "Voice layer",
+    objective: "Give Northstar a voice surface for calls and spoken workflows when the product is ready.",
+    selected_vendor_key: "elevenlabs",
+    updated_at: new Date().toISOString(),
+    vendors: [
+      { key: "elevenlabs", name: "ElevenLabs", tagline: "Voice generation" },
+      { key: "vapi", name: "Vapi", tagline: "Voice workflows" }
+    ]
+  }
+];
+
 const maskSecret = (value: string) => {
   const normalized = value.trim();
   if (normalized.length <= 8) {
@@ -206,6 +347,9 @@ const buildWorkspaceConfiguration = (_websiteUrl: string, intake?: FounderIntake
     founder_intake: intake,
     execution_provider: defaultExecutionProviders(),
     integrations: defaultIntegrations(),
+    agent_stack: {
+      wrappers: defaultAgentToolWrappers()
+    },
     updated_at: now
   };
 };
@@ -262,6 +406,7 @@ const normalizeWorkspaceConfiguration = (projectId: string, current: WorkspaceCo
       }))
     },
     integrations: patch.integrations ?? baseline.integrations,
+    agent_stack: patch.agent_stack ?? baseline.agent_stack,
     updated_at: new Date().toISOString()
   };
 };
@@ -322,6 +467,84 @@ const loadDashboardRecord = async (projectId: string) => {
     comments: project.comments,
     agentRuns: project.agentRuns
   });
+};
+
+const refreshFounderContextOnTasks = async (projectId: string, founderIntakeId?: string | null) => {
+  const intakeRecord = founderIntakeId
+    ? await prisma.founderIntake.findUnique({ where: { id: founderIntakeId } })
+    : await prisma.founderIntake.findUnique({ where: { projectId } });
+  if (!intakeRecord) {
+    return false;
+  }
+
+  const serializedIntake = serializeFounderIntake(intakeRecord);
+  const tasks = await prisma.task.findMany({ where: { projectId } });
+  for (const task of tasks) {
+    await upsertTaskRecord(projectId, applyFounderContextToTask(serializeTask(task), serializedIntake));
+  }
+
+  await prisma.agentRun.create({
+    data: {
+      id: nanoid(),
+      projectId,
+      runType: "founder_feedback_refresh",
+      status: "completed",
+      summary: "Updated task priority context using the latest founder feedback.",
+      outputJson: JSON.stringify({
+        task_count: tasks.length,
+        founder_intake_id: serializedIntake.id
+      })
+    }
+  });
+
+  return true;
+};
+
+export const recordFounderFeedback = async (projectId: string, feedback: string, source: "comment" | "approval_rejection" | "revision_request") => {
+  const note = feedback.trim();
+  if (note.length < 8) {
+    return false;
+  }
+
+  const founderIntake = await prisma.founderIntake.findUnique({ where: { projectId } });
+  if (!founderIntake) {
+    return false;
+  }
+
+  const mergedInput = mergeFounderFeedback(serializeFounderIntake(founderIntake), note);
+  const nextAnswersJson = JSON.stringify(mergedInput.answers);
+  const nextPlanningContext = buildPlanningContext(mergedInput) || null;
+
+  if (nextAnswersJson === founderIntake.answersJson && nextPlanningContext === founderIntake.planningContext) {
+    return false;
+  }
+
+  const updatedIntake = await prisma.founderIntake.update({
+    where: { id: founderIntake.id },
+    data: {
+      answersJson: nextAnswersJson,
+      planningContext: nextPlanningContext,
+      lastSubmittedAt: new Date()
+    }
+  });
+
+  await prisma.agentRun.create({
+    data: {
+      id: nanoid(),
+      projectId,
+      runType: "founder_feedback",
+      status: "completed",
+      summary: `Captured founder feedback from ${source.replaceAll("_", " ")} and updated the learning context.`,
+      outputJson: JSON.stringify({
+        source,
+        founder_intake_id: updatedIntake.id,
+        latest_note: note
+      })
+    }
+  });
+
+  await refreshFounderContextOnTasks(projectId, updatedIntake.id);
+  return true;
 };
 
 export const upsertTaskRecord = async (projectId: string, task: ReturnType<typeof serializeTask>) => {
@@ -620,6 +843,7 @@ export const createTaskComment = async (projectId: string, taskId: string, body:
   }
 
   await createCommentRecord(projectId, taskId, body, author);
+  await recordFounderFeedback(projectId, body, "comment");
 
   return loadDashboardRecord(projectId);
 };
@@ -878,6 +1102,7 @@ export const decideApproval = async (approvalId: string, decision: "APPROVED" | 
 
     if (decision === "REJECTED" && normalizedNote) {
       await createCommentRecord(linkedTask.projectId, linkedTask.id, normalizedNote);
+      await recordFounderFeedback(linkedTask.projectId, normalizedNote, "approval_rejection");
     }
   }
 

@@ -5,7 +5,7 @@ import type { ConnectionStatus, ProviderSetupStatus, SessionRole } from "@founde
 import { buildPlanningContext, normalizeFounderIntakeInput, type FounderIntakeInput, applyFounderContextToTask } from "../lib/founder-intake.js";
 import { prisma } from "../lib/prisma.js";
 import { serializeApproval, serializeArtifactRevision, serializeExecutionJob, serializeExecutionProviderConfig, serializeFounderIntake, serializeIntegrationConnection, serializeTask, serializeWorkspaceSession } from "../lib/serializers.js";
-import { getDashboard, reprioritizeProjectTasks, upsertTaskRecord } from "./dashboard.js";
+import { getDashboard, recordFounderFeedback, reprioritizeProjectTasks, upsertTaskRecord } from "./dashboard.js";
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const DEFAULT_REVISION_REQUESTED_BY = "founder";
@@ -443,6 +443,7 @@ export const requestArtifactRevision = async (approvalId: string, input: {
     await upsertTaskRecord(linkedTask.projectId, nextTask);
     await createTaskComment(linkedTask.projectId, linkedTask.id, input.instruction.trim(), input.requested_by?.trim() || DEFAULT_REVISION_REQUESTED_BY);
   }
+  await recordFounderFeedback(approval.projectId, input.instruction.trim(), "revision_request");
 
   await prisma.agentRun.create({
     data: {

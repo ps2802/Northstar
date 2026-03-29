@@ -19,6 +19,8 @@ Status date: March 28, 2026
 - founder access now comes from server-issued workspace sessions tied to founder email plus workspace website
 - non-health product routes now require a founder session header, with only onboarding and access bootstrap left public
 - backend serialization now returns masked display fields instead of raw provider or connection payloads
+- Connections now includes persisted agent-stack wrapper preferences instead of keeping external tool choices out of product truth
+- founder feedback now updates stored planning context so future prioritization and revision guidance improve from comments and change requests
 
 ## Active priorities
 
@@ -31,6 +33,7 @@ Status date: March 28, 2026
 
 - `blog_brief` execution still uses mocked generation logic
 - integrations mostly persist saved state without real delivery or validation depth
+- agent-stack wrapper choices are stored as preferred vendors only; they do not yet provision or validate those external systems
 - CRM contacts and research notes are still seeded/demo data in the web app
 - no worker/retry daemon yet for queued execution jobs
 - no team collaboration layer yet

@@ -59,6 +59,15 @@ export type TaskSource = 'system' | 'user' | 'agent';
 export type OwnerType = 'agent' | 'user' | 'human';
 export type TaskActor = 'northstar' | 'founder';
 export type IntegrationCategory = 'social' | 'analytics' | 'support' | 'productivity' | 'crm';
+export type AgentToolCategory =
+  | 'communication_identity'
+  | 'compute_execution'
+  | 'browser_web_actions'
+  | 'search_research'
+  | 'memory_knowledge'
+  | 'payments_transactions'
+  | 'saas_api_access'
+  | 'voice_layer';
 export type TaskChannel = 'x' | 'linkedin' | 'instagram' | 'email' | 'whatsapp' | 'telegram' | 'web' | 'drive' | 'intercom' | 'internal';
 export type ExecutionStage =
   | 'strategy'
@@ -117,6 +126,35 @@ export interface WorkspaceTruth {
   tokenPresent: boolean;
   loadedAt: string;
   session?: WorkspaceAccessSession | null;
+}
+
+export interface AgentToolVendor {
+  id: string;
+  name: string;
+  tagline: string;
+  url?: string;
+}
+
+export interface AgentToolWrapper {
+  id: AgentToolCategory;
+  label: string;
+  objective: string;
+  selectedVendorId?: string;
+  vendors: AgentToolVendor[];
+  updatedAt: string;
+}
+
+export interface WorkspaceLearningSignal {
+  id: string;
+  source: 'comment' | 'approval_rejection';
+  note: string;
+  capturedAt: string;
+}
+
+export interface WorkspaceLearning {
+  preferences: string[];
+  recentFeedback: WorkspaceLearningSignal[];
+  lastRefinedAt: string;
 }
 
 export interface ExecutionProvider {
@@ -365,6 +403,8 @@ export interface AppState {
   executionProviders: ExecutionProvider[];
   activeProviderId: string;
   integrations: Integration[];
+  agentToolWrappers: AgentToolWrapper[];
+  workspaceLearning: WorkspaceLearning;
   crmContacts: CRMContact[];
   researchNotes: ResearchNote[];
   workspaceTruth?: WorkspaceTruth;

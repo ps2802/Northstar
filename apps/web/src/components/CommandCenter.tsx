@@ -4,6 +4,7 @@ import { formatDateTime } from '../lib/format';
 import { demoState } from '../lib/mockData';
 import { executableTaskTypes } from '../lib/taskConfig';
 import type {
+  AgentToolCategory,
   AppState,
   Approval,
   DashboardSection,
@@ -354,6 +355,7 @@ export function CommandCenter() {
   const [connectIntegrationId, setConnectIntegrationId] = useState<string | null>(null);
   const [disconnectIntegrationId, setDisconnectIntegrationId] = useState<string | null>(null);
   const [syncIntegrationId, setSyncIntegrationId] = useState<string | null>(null);
+  const [selectAgentWrapperId, setSelectAgentWrapperId] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [addTaskError, setAddTaskError] = useState<string | null>(null);
   const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
@@ -361,6 +363,7 @@ export function CommandCenter() {
   const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
   const [providerErrors, setProviderErrors] = useState<Record<string, string>>({});
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, string>>({});
+  const [agentWrapperErrors, setAgentWrapperErrors] = useState<Record<string, string>>({});
   const [boardQuery, setBoardQuery] = useState('');
   const boardSearchRef = useRef<HTMLInputElement | null>(null);
 
@@ -608,6 +611,14 @@ export function CommandCenter() {
     needs_key: state.executionProviders.filter((provider) => provider.status === 'needs_key').length,
     local_only: state.executionProviders.filter((provider) => provider.status === 'available').length,
   }), [state.executionProviders]);
+  const agentStackSummary = useMemo(() => ({
+    selected: state.agentToolWrappers.filter((wrapper) => wrapper.selectedVendorId).length,
+    unselected: state.agentToolWrappers.filter((wrapper) => !wrapper.selectedVendorId).length,
+  }), [state.agentToolWrappers]);
+  const workspaceLearningSummary = useMemo(() => ({
+    preferences: state.workspaceLearning.preferences.length,
+    recentFeedback: state.workspaceLearning.recentFeedback.length,
+  }), [state.workspaceLearning]);
   const sectionTasks = boardVisibleTasks.filter((task) => {
     switch (activeSection) {
       case 'seo':
@@ -899,6 +910,22 @@ export function CommandCenter() {
     }
   };
 
+  const handleSelectAgentToolVendor = async (wrapperId: AgentToolCategory, vendorId: string) => {
+    setAgentWrapperErrors((current) => clearTaskError(current, wrapperId));
+    setSelectAgentWrapperId(wrapperId);
+
+    try {
+      const updated = await api.selectAgentToolVendor(wrapperId, vendorId);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      setAgentWrapperErrors((current) => ({ ...clearTaskError(current, wrapperId), [wrapperId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setSelectAgentWrapperId((current) => current === wrapperId ? null : current);
+    }
+  };
+
   const handleReadOnlyStatusChange = async (taskId: string) => {
     setStatusErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: riskyMutationDisabledMessage }));
     return false;
@@ -1167,6 +1194,8 @@ export function CommandCenter() {
       return (
         <div className="section-stack">
           <ConnectionsPanel
+            agentToolWrappers={state.agentToolWrappers}
+            agentWrapperErrorById={agentWrapperErrors}
             connectErrorById={integrationErrors}
             founderIntake={founderIntake}
             providerErrorById={providerErrors}
@@ -1174,11 +1203,13 @@ export function CommandCenter() {
             executionProviders={state.executionProviders}
             activeProviderId={state.activeProviderId}
             integrations={state.integrations}
+            pendingAgentWrapperId={selectAgentWrapperId}
             pendingProviderConnectId={connectProviderId}
             pendingProviderActivateId={activateProviderId}
             pendingConnectId={connectIntegrationId}
             pendingDisconnectId={disconnectIntegrationId}
             pendingSyncId={syncIntegrationId}
+            onSelectAgentToolVendor={handleSelectAgentToolVendor}
             onProviderConnect={handleConnectProvider}
             onProviderActivate={handleActivateProvider}
             onConnect={handleConnectIntegration}
@@ -1249,6 +1280,20 @@ export function CommandCenter() {
                   <span className="connection-status-planned">{providerSummary.local_only} local only</span>
                 </div>
               </article>
+              <article className="settings-detail-card">
+                <span>Agent stack wrappers</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{agentStackSummary.selected} preferred vendors set</span>
+                  <span className="connection-status-planned">{agentStackSummary.unselected} not chosen</span>
+                </div>
+              </article>
+              <article className="settings-detail-card">
+                <span>Northstar learning</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{workspaceLearningSummary.preferences} learned preferences</span>
+                  <span className="connection-status-planned">{workspaceLearningSummary.recentFeedback} recent founder signals</span>
+                </div>
+              </article>
             </div>
 
             <div className="settings-detail-grid">
@@ -1292,6 +1337,45 @@ export function CommandCenter() {
                     </div>
                   ))}
                 </div>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Agent stack wrappers</span>
+                <div className="settings-status-list">
+                  {state.agentToolWrappers.map((wrapper) => (
+                    <div key={wrapper.id} className="settings-status-row">
+                      <strong>{wrapper.label}</strong>
+                      <span>{wrapper.vendors.find((vendor) => vendor.id === wrapper.selectedVendorId)?.name ?? 'Not chosen'}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Northstar learning</span>
+                <div className="settings-status-list">
+                  {state.workspaceLearning.preferences.length ? state.workspaceLearning.preferences.map((preference) => (
+                    <div key={preference} className="settings-status-row">
+                      <strong>Preference</strong>
+                      <span>{preference}</span>
+                    </div>
+                  )) : (
+                    <div className="settings-status-row">
+                      <strong>No learned preferences yet</strong>
+                      <span>Founder comments and change requests will sharpen future prioritization here.</span>
+                    </div>
+                  )}
+                </div>
+                {state.workspaceLearning.recentFeedback.length ? (
+                  <div className="settings-status-list">
+                    {state.workspaceLearning.recentFeedback.slice(0, 3).map((signal) => (
+                      <div key={signal.id} className="settings-status-row">
+                        <strong>{signal.source === 'approval_rejection' ? 'Change request' : 'Founder comment'}</strong>
+                        <span>{signal.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </article>
             </div>
           </section>

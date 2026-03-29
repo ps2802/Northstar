@@ -12,6 +12,7 @@ Historical rebuild waves are complete enough for demo use. The current phase is 
 - board-first, approval-first, single-founder-first
 - `blog_brief` is the only live execution path in the founder product
 - other task types remain planning-only in this build
+- the Connections surface now includes wrapper selection for the external agent stack categories Northstar may route through later
 
 ## Batch 1 P0 shipped
 
@@ -25,6 +26,8 @@ Historical rebuild waves are complete enough for demo use. The current phase is 
 - required founder session headers on all non-health product routes, with only onboarding and access bootstrap kept public
 - scoped project, approval, revision, provider, and connection access to the session workspace
 - stopped returning raw provider and connection payloads from backend serialization
+- added persisted wrapper preferences for the agent stack capability categories without pretending those vendors are already wired live
+- made founder comments, rejection notes, and revision requests update founder planning context so Northstar adapts to user feedback over time
 
 ## External pilot blockers still open
 

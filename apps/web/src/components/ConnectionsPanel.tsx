@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import type { ExecutionProvider, FounderIntake, Integration, WorkspaceTruth } from '../lib/types';
+import { useEffect, useState } from 'react';
+import type { AgentToolCategory, AgentToolWrapper, ExecutionProvider, FounderIntake, Integration, WorkspaceTruth } from '../lib/types';
 
 interface ConnectionsPanelProps {
   activeProviderId: string;
+  agentToolWrappers: AgentToolWrapper[];
+  agentWrapperErrorById: Record<string, string>;
   connectErrorById: Record<string, string>;
   executionProviders: ExecutionProvider[];
   founderIntake: FounderIntake | null;
   integrations: Integration[];
+  pendingAgentWrapperId?: string | null;
   pendingConnectId?: string | null;
   pendingDisconnectId?: string | null;
   pendingProviderActivateId?: string | null;
@@ -14,6 +17,7 @@ interface ConnectionsPanelProps {
   pendingSyncId?: string | null;
   providerErrorById: Record<string, string>;
   workspaceTruth: WorkspaceTruth;
+  onSelectAgentToolVendor: (wrapperId: AgentToolCategory, vendorId: string) => Promise<boolean>;
   onConnect: (integrationId: string, credential?: string) => Promise<boolean>;
   onDisconnect: (integrationId: string) => Promise<boolean>;
   onProviderActivate: (providerId: string) => Promise<boolean>;
@@ -55,10 +59,13 @@ const getReadOnlyNotice = (workspaceTruth: WorkspaceTruth) => {
 
 export function ConnectionsPanel({
   activeProviderId,
+  agentToolWrappers,
+  agentWrapperErrorById,
   connectErrorById,
   executionProviders,
   founderIntake,
   integrations,
+  pendingAgentWrapperId,
   pendingConnectId,
   pendingDisconnectId,
   pendingProviderActivateId,
@@ -66,6 +73,7 @@ export function ConnectionsPanel({
   pendingSyncId,
   providerErrorById,
   workspaceTruth,
+  onSelectAgentToolVendor,
   onConnect,
   onDisconnect,
   onProviderActivate,
@@ -74,13 +82,21 @@ export function ConnectionsPanel({
 }: ConnectionsPanelProps) {
   const [providerSecrets, setProviderSecrets] = useState<Record<string, string>>({});
   const [integrationSecrets, setIntegrationSecrets] = useState<Record<string, string>>({});
+  const [wrapperSelections, setWrapperSelections] = useState<Record<string, string>>({});
   const mutationsLocked = !workspaceTruth.riskyMutationsAllowed;
   const readOnlyNotice = getReadOnlyNotice(workspaceTruth);
   const savedProviderCount = executionProviders.filter((provider) => provider.status === 'connected').length;
   const savedIntegrationCount = integrations.filter((integration) => integration.status === 'connected').length;
+  const configuredWrapperCount = agentToolWrappers.filter((wrapper) => wrapper.selectedVendorId).length;
   const sessionLabel = workspaceTruth.sessionState === 'active'
     ? workspaceTruth.session?.email ?? workspaceTruth.session?.name ?? 'Live founder session'
     : 'Not live';
+
+  useEffect(() => {
+    setWrapperSelections(
+      Object.fromEntries(agentToolWrappers.map((wrapper) => [wrapper.id, wrapper.selectedVendorId ?? wrapper.vendors[0]?.id ?? '']))
+    );
+  }, [agentToolWrappers]);
 
   return (
     <section className="rail-card connections-panel">
@@ -106,6 +122,73 @@ export function ConnectionsPanel({
         <span>Priority channel</span>
         <strong>{founderIntake?.keyChannel ?? 'Not provided yet'}</strong>
       </div>
+
+      <section className="connection-section">
+        <div className="connection-section-head">
+          <div>
+            <p className="eyebrow">Agent stack</p>
+            <h3>Preferred wrapper by capability</h3>
+          </div>
+          <span className="domain-badge">{configuredWrapperCount} chosen</span>
+        </div>
+
+        <div className="connection-grid">
+          {agentToolWrappers.map((wrapper) => {
+            const selectedVendorId = wrapperSelections[wrapper.id] ?? wrapper.selectedVendorId ?? wrapper.vendors[0]?.id ?? '';
+            const selectedVendor = wrapper.vendors.find((vendor) => vendor.id === selectedVendorId);
+            const wrapperLocked = mutationsLocked || pendingAgentWrapperId === wrapper.id;
+
+            return (
+              <article key={wrapper.id} className={`connection-card ${wrapper.selectedVendorId ? 'connection-card-active' : ''}`}>
+                <div className="connection-card-head">
+                  <strong>{wrapper.label}</strong>
+                  <span className="domain-badge">{selectedVendor?.name ?? 'Not chosen'}</span>
+                </div>
+                <p>{wrapper.objective}</p>
+                {selectedVendor ? <p className="connection-card-caption">{selectedVendor.tagline}</p> : null}
+                <p className="connection-card-caption">
+                  Last updated {new Date(wrapper.updatedAt).toLocaleString()}
+                </p>
+                {agentWrapperErrorById[wrapper.id] ? <p className="inline-error">{agentWrapperErrorById[wrapper.id]}</p> : null}
+
+                <label className="connection-field">
+                  Preferred vendor
+                  <select
+                    disabled={wrapperLocked}
+                    value={selectedVendorId}
+                    onChange={(event) => {
+                      const nextVendorId = event.target.value;
+                      setWrapperSelections((current) => ({ ...current, [wrapper.id]: nextVendorId }));
+                    }}
+                  >
+                    {wrapper.vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="connection-card-meta">
+                  <span>{wrapper.vendors.length} vendor options</span>
+                  <div className="connection-card-actions">
+                    <button
+                      className="primary-button secondary"
+                      type="button"
+                      disabled={wrapperLocked || !selectedVendorId || selectedVendorId === wrapper.selectedVendorId}
+                      onClick={async () => {
+                        await onSelectAgentToolVendor(wrapper.id, selectedVendorId);
+                      }}
+                    >
+                      {pendingAgentWrapperId === wrapper.id ? 'Saving...' : wrapper.selectedVendorId ? 'Update preferred vendor' : 'Save preferred vendor'}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="connection-section">
         <div className="connection-section-head">

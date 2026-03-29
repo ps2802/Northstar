@@ -449,6 +449,7 @@ export function TaskDrawer({
                 onChange={(event) => setCommentBody(event.target.value)}
                 placeholder="Add founder context, approval feedback, or execution guidance."
               />
+              <p className="summary-copy">Founder notes here help Northstar sharpen future prioritization and the next revision pass.</p>
               <div className="comment-composer-actions">
                 {commentError ? <p className="inline-error">{commentError}</p> : null}
                 <button className="primary-button" type="submit" disabled={commentLocked || !commentBody.trim()}>

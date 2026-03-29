@@ -1,6 +1,9 @@
+import { defaultAgentToolWrappers } from "./agentStack";
 import { demoState } from "./mockData";
 import { supportedManualTaskTypes } from "./taskConfig";
 import type {
+  AgentToolCategory,
+  AgentToolWrapper,
   AppState,
   Approval,
   Artifact,
@@ -13,6 +16,7 @@ import type {
   TaskStatus,
   TaskType,
   WorkspaceAccessSession,
+  WorkspaceLearning,
   WorkspaceTruth
 } from "./types";
 
@@ -186,6 +190,21 @@ interface BackendWorkspaceConfiguration {
     connected_at?: string;
     last_sync_at?: string;
   }>;
+  agent_stack?: {
+    wrappers: Array<{
+      key: AgentToolCategory;
+      label: string;
+      objective: string;
+      selected_vendor_key?: string;
+      updated_at: string;
+      vendors: Array<{
+        key: string;
+        name: string;
+        tagline: string;
+        url?: string;
+      }>;
+    }>;
+  };
 }
 
 interface IntegrationOverride {
@@ -559,6 +578,9 @@ const getDefaultIntegrations = (): Integration[] => clone(demoState.integrations
   lastSyncAt: undefined,
 }));
 
+const getDefaultAgentToolWrappers = (): AgentToolWrapper[] => clone(defaultAgentToolWrappers());
+const getDefaultWorkspaceLearning = (): WorkspaceLearning => clone(demoState.workspaceLearning);
+
 const createCachedFallbackState = (): AppState => ({
   ...clone(demoState),
   founderIntake: null,
@@ -573,6 +595,8 @@ const createCachedFallbackState = (): AppState => ({
   executionProviders: getDefaultExecutionProviders(),
   activeProviderId: demoState.activeProviderId,
   integrations: getDefaultIntegrations(),
+  agentToolWrappers: getDefaultAgentToolWrappers(),
+  workspaceLearning: getDefaultWorkspaceLearning(),
   crmContacts: [],
   researchNotes: [],
   workspaceTruth: buildWorkspaceTruth(null, {
@@ -637,6 +661,8 @@ const hydrateState = (state: AppState): AppState => {
     executionProviders: state.executionProviders ?? base.executionProviders,
     activeProviderId: state.activeProviderId ?? base.activeProviderId,
     integrations,
+    agentToolWrappers: state.agentToolWrappers ?? base.agentToolWrappers,
+    workspaceLearning: state.workspaceLearning ?? base.workspaceLearning,
     crmContacts: state.crmContacts ?? base.crmContacts,
     researchNotes: state.researchNotes ?? base.researchNotes,
     workspaceTruth,
@@ -754,6 +780,42 @@ const uiTypeToBackend = (type: TaskType): BackendTaskType => {
   }
 };
 
+const deriveWorkspaceLearning = (dashboard: BackendDashboard): WorkspaceLearning => {
+  const notes = [
+    ...dashboard.approvals
+      .filter((approval) => approval.status === "REJECTED" && approval.decision_note?.trim())
+      .map((approval) => ({
+        id: `approval_${approval.id}`,
+        source: "approval_rejection" as const,
+        note: approval.decision_note!.trim(),
+        capturedAt: approval.updated_at,
+      })),
+    ...(dashboard.comments ?? [])
+      .filter((comment) => comment.author.trim().toLowerCase() === "founder" && comment.body.trim())
+      .map((comment) => ({
+        id: `comment_${comment.id}`,
+        source: "comment" as const,
+        note: comment.body.trim(),
+        capturedAt: comment.updated_at,
+      })),
+  ]
+    .sort((left, right) => Date.parse(right.capturedAt) - Date.parse(left.capturedAt))
+    .slice(0, 8);
+
+  const preferences = Array.from(new Set(
+    notes
+      .flatMap((item) => item.note.split(/\n|[.;]+/g))
+      .map((entry) => entry.replace(/\s+/g, " ").trim())
+      .filter((entry) => entry.length >= 12 && entry.length <= 140)
+  )).slice(0, 8);
+
+  return {
+    preferences,
+    recentFeedback: notes,
+    lastRefinedAt: notes[0]?.capturedAt ?? new Date().toISOString(),
+  };
+};
+
 const mapDashboard = (dashboard: BackendDashboard): AppState => {
   const configuration = getLatestWorkspaceConfiguration(dashboard.agent_runs);
   const taskTypeByArtifact = new Map(
@@ -852,6 +914,22 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
     }))
     : getDefaultIntegrations();
 
+  const agentToolWrappers: AgentToolWrapper[] = configuration?.agent_stack?.wrappers?.length
+    ? configuration.agent_stack.wrappers.map((wrapper) => ({
+      id: wrapper.key,
+      label: wrapper.label,
+      objective: wrapper.objective,
+      selectedVendorId: wrapper.selected_vendor_key,
+      updatedAt: wrapper.updated_at,
+      vendors: wrapper.vendors.map((vendor) => ({
+        id: vendor.key,
+        name: vendor.name,
+        tagline: vendor.tagline,
+        url: vendor.url,
+      })),
+    }))
+    : getDefaultAgentToolWrappers();
+
   const tasks: Task[] = dashboard.tasks.map((task) => ({
     id: task.id,
     title: task.title,
@@ -945,6 +1023,8 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
     executionProviders,
     activeProviderId: configuration?.execution_provider?.active_provider ?? demoState.activeProviderId,
     integrations,
+    agentToolWrappers,
+    workspaceLearning: deriveWorkspaceLearning(dashboard),
     crmContacts: [],
     researchNotes: [],
   });
@@ -1053,6 +1133,7 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
   executionProviders?: ExecutionProvider[];
   activeProviderId?: string;
   integrations?: Integration[];
+  agentToolWrappers?: AgentToolWrapper[];
 }) => ({
   founder_intake: (() => {
     const founderIntake = overrides?.founderIntake ?? latestState.founderIntake;
@@ -1101,6 +1182,21 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
     connected_at: integration.connectedAt,
     last_sync_at: integration.lastSyncAt,
   })),
+  agent_stack: {
+    wrappers: (overrides?.agentToolWrappers ?? latestState.agentToolWrappers).map((wrapper) => ({
+      key: wrapper.id,
+      label: wrapper.label,
+      objective: wrapper.objective,
+      selected_vendor_key: wrapper.selectedVendorId,
+      updated_at: wrapper.updatedAt,
+      vendors: wrapper.vendors.map((vendor) => ({
+        key: vendor.id,
+        name: vendor.name,
+        tagline: vendor.tagline,
+        url: vendor.url,
+      })),
+    })),
+  },
 });
 
 const getLiveWorkspaceTruth = (sessionHealth: SessionHealth): Partial<WorkspaceTruth> => ({
@@ -1222,6 +1318,7 @@ export interface FounderApi {
   connectIntegration: (integrationId: string, credential?: string) => Promise<AppState>;
   disconnectIntegration: (integrationId: string) => Promise<AppState>;
   syncIntegration: (integrationId: string) => Promise<AppState>;
+  selectAgentToolVendor: (wrapperId: AgentToolCategory, vendorId: string) => Promise<AppState>;
 }
 
 export const createFounderApi = (): FounderApi => ({
@@ -1541,5 +1638,31 @@ export const createFounderApi = (): FounderApi => ({
     }
 
     throw createMutationError(`Live validation for ${integration.name} is not available in this workspace yet.`);
+  },
+  selectAgentToolVendor: async (wrapperId: AgentToolCategory, vendorId: string) => {
+    const sessionHealth = requireLiveSession();
+    const wrapper = latestState.agentToolWrappers.find((item) => item.id === wrapperId);
+    if (!wrapper) {
+      throw createMutationError("Agent tool wrapper not found.");
+    }
+
+    const vendor = wrapper.vendors.find((item) => item.id === vendorId);
+    if (!vendor) {
+      throw createMutationError("Selected vendor is not available for this wrapper.");
+    }
+
+    const agentToolWrappers = latestState.agentToolWrappers.map((current) => current.id === wrapperId
+      ? {
+        ...current,
+        selectedVendorId: vendorId,
+        updatedAt: new Date().toISOString(),
+      }
+      : current);
+
+    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
+      method: "POST",
+      body: JSON.stringify(buildWorkspaceConfigurationPayload({ agentToolWrappers }))
+    });
+    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
   }
 });
