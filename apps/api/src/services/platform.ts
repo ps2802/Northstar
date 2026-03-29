@@ -88,7 +88,7 @@ const validateProviderConnection = async (input: {
       systemPrompt: "Return the word ok.",
       userPrompt: "Reply with ok.",
       temperature: 0,
-      maxTokens: 8
+      maxTokens: 16
     });
 
     return {
