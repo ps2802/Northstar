@@ -168,8 +168,7 @@ declare module "fastify" {
 
 const PUBLIC_PRODUCT_ROUTES = new Set([
   "/health",
-  "/projects/onboard",
-  "/auth/access"
+  "/projects/onboard"
 ]);
 
 const EXECUTABLE_TASK_STATUSES = new Set(["PLANNED", "IN_PROGRESS"]);
@@ -715,6 +714,11 @@ export const registerRoutes = async (app: FastifyInstance) => {
   });
 
   app.post("/auth/access", async (request, reply) => {
+    const session = getWorkspaceSession(request, reply);
+    if (!session) {
+      return;
+    }
+
     const parsed = accessSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -791,9 +795,7 @@ export const registerRoutes = async (app: FastifyInstance) => {
       ? String((request.query as Record<string, unknown>).project_id)
       : undefined;
     if (projectId) {
-      if (!await requireProjectScope(projectId, session.workspace_id, reply)) {
-        return;
-      }
+      return reply.status(400).send({ error: "Project-scoped connections are not supported yet." });
     }
     return { connections: await listIntegrationConnections(workspaceId, projectId) };
   });
@@ -810,9 +812,7 @@ export const registerRoutes = async (app: FastifyInstance) => {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     if (parsed.data.project_id) {
-      if (!await requireProjectScope(parsed.data.project_id, session.workspace_id, reply)) {
-        return;
-      }
+      return reply.status(400).send({ error: "Project-scoped connections are not supported yet." });
     }
 
     const connection = await upsertIntegrationConnection(workspaceId, providerKey, parsed.data);

@@ -291,6 +291,9 @@ export function ConnectionsPanel({
             const validationUnavailable = integration.status === 'connected'
               ? `Validation for ${integration.name} is not available in this founder UI yet.`
               : `Save ${integration.name} first before validation can exist.`;
+            const oauthCopy = integration.authType === 'oauth'
+              ? `${integration.name} needs a real OAuth handoff. This founder UI cannot mark it connected directly.`
+              : null;
 
             return (
               <article key={integration.id} className={`connection-card ${integration.status === 'connected' ? 'connection-card-active' : ''}`}>
@@ -304,15 +307,16 @@ export function ConnectionsPanel({
                 </p>
                 {integration.maskedSecret ? <p className="connection-card-caption">Saved credential: {integration.maskedSecret}</p> : null}
                 {integration.status === 'connected' ? <p className="connection-card-caption">{validationUnavailable}</p> : null}
+                {oauthCopy ? <p className="connection-card-caption">{oauthCopy}</p> : null}
                 {connectErrorById[integration.id] ? <p className="inline-error">{connectErrorById[integration.id]}</p> : null}
 
                 <label className="connection-field">
                   {integration.credentialLabel}
                   <input
-                    disabled={connectionLocked}
+                    disabled={connectionLocked || integration.authType === 'oauth'}
                     value={integrationSecret}
                     onChange={(event) => setIntegrationSecrets((current) => ({ ...current, [integration.id]: event.target.value }))}
-                    placeholder={`Paste ${integration.credentialLabel.toLowerCase()}`}
+                    placeholder={integration.authType === 'oauth' ? 'OAuth flow required' : `Paste ${integration.credentialLabel.toLowerCase()}`}
                   />
                 </label>
 
@@ -322,7 +326,7 @@ export function ConnectionsPanel({
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled={connectionLocked}
+                      disabled={connectionLocked || integration.authType === 'oauth'}
                       onClick={async () => {
                         const connected = await onConnect(integration.id, integrationSecret);
                         if (connected) {
@@ -330,7 +334,13 @@ export function ConnectionsPanel({
                         }
                       }}
                     >
-                      {isConnecting ? 'Saving...' : integration.status === 'connected' ? 'Update saved access' : 'Save access'}
+                      {integration.authType === 'oauth'
+                        ? 'OAuth required'
+                        : isConnecting
+                          ? 'Saving...'
+                          : integration.status === 'connected'
+                            ? 'Update saved access'
+                            : 'Save access'}
                     </button>
                     <button
                       className="ghost-button"

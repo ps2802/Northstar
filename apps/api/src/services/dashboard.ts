@@ -1073,6 +1073,18 @@ export const decideApproval = async (approvalId: string, decision: "APPROVED" | 
     return null;
   }
 
+  const latestPendingApproval = await prisma.approval.findFirst({
+    where: {
+      artifactId: currentApproval.artifactId,
+      status: "PENDING"
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true }
+  });
+  if (!latestPendingApproval || latestPendingApproval.id !== approvalId) {
+    return null;
+  }
+
   const approval = await prisma.approval.update({
     where: { id: approvalId },
     data: {

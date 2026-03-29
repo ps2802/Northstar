@@ -698,6 +698,25 @@ export function CommandCenter() {
     setSelectedTask((current) => current ? updated.tasks.find((task) => task.id === current.id) ?? null : null);
   };
 
+  const applyFailureWorkspaceState = useCallback((error: unknown) => {
+    const status = typeof error === 'object' && error && 'status' in error ? Number((error as { status?: number }).status) : undefined;
+    if (status !== 401) {
+      return;
+    }
+
+    const cached = api.getCachedState();
+    if (cached) {
+      applyState(cached);
+      setBootstrapNotice(getWorkspaceTruthNotice(cached.workspaceTruth ?? fallbackWorkspaceTruth));
+      return;
+    }
+
+    setAvailableProjects([]);
+    setSelectedProjectId(null);
+    setPage('onboarding');
+    setActiveSection('board');
+  }, []);
+
   const handleOnboardingDraftChange = useCallback((draft: OnboardingDraft) => {
     setOnboardingDraft(draft);
     persistStoredJson(ONBOARDING_DRAFT_KEY, draft);
@@ -743,6 +762,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setAddTaskError(getErrorMessage(error));
       return false;
     } finally {
@@ -759,6 +779,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setStatusErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -775,6 +796,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -791,6 +813,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -807,6 +830,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -823,6 +847,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setCommentErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -839,6 +864,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setProviderErrors((current) => ({ ...clearTaskError(current, providerId), [providerId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -855,6 +881,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setProviderErrors((current) => ({ ...clearTaskError(current, providerId), [providerId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -871,6 +898,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -887,6 +915,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -903,6 +932,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -919,6 +949,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setAgentWrapperErrors((current) => ({ ...clearTaskError(current, wrapperId), [wrapperId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -1502,11 +1533,17 @@ export function CommandCenter() {
                       disabled={workspaceTruth.source !== 'live' || workspaceTruth.sessionState !== 'active'}
                       value={selectedProjectId ?? state.project.id}
                       onChange={async (event) => {
+                        const previousProjectId = selectedProjectId ?? state.project.id;
                         const nextProjectId = event.target.value;
                         setSelectedProjectId(nextProjectId);
-                        const updated = await api.getState(nextProjectId);
-                        applyState(updated);
-                        setSelectedTask(null);
+                        try {
+                          const updated = await api.getState(nextProjectId);
+                          applyState(updated);
+                          setSelectedTask(null);
+                        } catch (error) {
+                          applyFailureWorkspaceState(error);
+                          setSelectedProjectId(previousProjectId);
+                        }
                       }}
                     >
                       {availableProjects.map((project) => (

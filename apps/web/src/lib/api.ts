@@ -1407,7 +1407,7 @@ export const createFounderApi = (): FounderApi => ({
       }
     } catch (error) {
       const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : undefined;
-      if (status !== 404) {
+      if (status !== 401 && status !== 404) {
         throw error;
       }
     }
@@ -1586,6 +1586,10 @@ export const createFounderApi = (): FounderApi => ({
     const integration = latestState.integrations.find((item) => item.id === integrationId);
     if (!integration) {
       throw createMutationError("Integration not found.");
+    }
+
+    if (integration.authType === "oauth") {
+      throw createMutationError(`${integration.name} requires a real OAuth flow. Saving it as connected from this UI is disabled.`);
     }
 
     if (integration.authType === "api_key" && !credential?.trim()) {

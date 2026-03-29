@@ -426,6 +426,21 @@ export const requestArtifactRevision = async (approvalId: string, input: {
     return null;
   }
 
+  await prisma.approval.update({
+    where: { id: approvalId },
+    data: {
+      status: "REJECTED",
+      decisionNote: input.instruction.trim(),
+      decidedBy: input.requested_by?.trim() || DEFAULT_REVISION_REQUESTED_BY,
+      decidedAt: new Date(),
+      artifact: {
+        update: {
+          status: "REJECTED"
+        }
+      }
+    }
+  });
+
   const linkedTask = await prisma.task.findFirst({ where: { artifactId: approval.artifactId } });
   const revision = await prisma.artifactRevision.create({
     data: {
@@ -475,6 +490,17 @@ export const submitArtifactRevision = async (revisionId: string, input: {
     }
   });
   if (!revision || revision.status !== "REQUESTED" || revision.approvalId) {
+    return null;
+  }
+
+  const openApproval = await prisma.approval.findFirst({
+    where: {
+      artifactId: revision.artifactId,
+      status: "PENDING"
+    },
+    select: { id: true }
+  });
+  if (openApproval) {
     return null;
   }
 
