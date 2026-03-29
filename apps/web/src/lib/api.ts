@@ -175,6 +175,7 @@ interface BackendWorkspaceConfiguration {
       is_default: boolean;
       masked_secret?: string;
       connected_at?: string;
+      last_error?: string;
     }>;
   };
   integrations?: Array<{
@@ -582,6 +583,8 @@ const getDefaultAgentToolWrappers = (): AgentToolWrapper[] => clone(defaultAgent
 const getDefaultWorkspaceLearning = (): WorkspaceLearning => clone(demoState.workspaceLearning);
 const getProviderDefaultModel = (providerId: string) => {
   switch (providerId) {
+    case "openrouter":
+      return "openai/gpt-4.1-mini";
     case "openai":
       return "gpt-4.1-mini";
     case "anthropic":
@@ -592,11 +595,32 @@ const getProviderDefaultModel = (providerId: string) => {
 };
 const getProviderBaseUrl = (providerId: string) => {
   switch (providerId) {
+    case "openrouter":
+      return "https://openrouter.ai/api/v1";
     case "openai":
-      return "https://api.openai.com";
+      return "https://api.openai.com/v1";
     default:
       return undefined;
   }
+};
+
+const mapPersistedProviderStatus = (
+  status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR",
+  authType: ExecutionProvider["authType"]
+): ExecutionProvider["status"] => {
+  if (authType === "cli") {
+    return "available";
+  }
+
+  if (status === "CONFIGURED") {
+    return "connected";
+  }
+
+  if (status === "ERROR") {
+    return "error";
+  }
+
+  return "needs_key";
 };
 
 const createCachedFallbackState = (): AppState => ({
@@ -912,6 +936,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       isDefault: provider.key === configuration.execution_provider?.active_provider || provider.is_default,
       maskedSecret: provider.masked_secret,
       connectedAt: provider.connected_at,
+      lastError: provider.last_error,
     }))
     : getDefaultExecutionProviders();
 
@@ -1185,6 +1210,7 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
       is_default: provider.id === (overrides?.activeProviderId ?? latestState.activeProviderId),
       masked_secret: provider.maskedSecret,
       connected_at: provider.connectedAt,
+      last_error: provider.lastError,
     })),
   },
   integrations: (overrides?.integrations ?? latestState.integrations).map((integration) => ({
@@ -1558,8 +1584,22 @@ export const createFounderApi = (): FounderApi => ({
       throw createMutationError(`Add an API key before connecting ${provider.name}.`);
     }
 
+    let persistedProvider:
+      | {
+          status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR";
+          last_validated_at?: string | null;
+          last_error?: string | null;
+        }
+      | null = null;
+
     if (provider.authType === "api_key") {
-      await fetchJson(`/workspaces/${latestState.project.workspaceId}/providers/${provider.id}`, {
+      const providerResponse = await fetchJson<{
+        provider: {
+          status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR";
+          last_validated_at?: string | null;
+          last_error?: string | null;
+        };
+      }>(`/workspaces/${latestState.project.workspaceId}/providers/${provider.id}`, {
         method: "PUT",
         body: JSON.stringify({
           label: provider.name,
@@ -1570,15 +1610,16 @@ export const createFounderApi = (): FounderApi => ({
           api_key: credential?.trim(),
         })
       });
+      persistedProvider = providerResponse.provider;
     }
 
-    const connectedAt = new Date().toISOString();
     const executionProviders = latestState.executionProviders.map((item) => item.id === providerId
       ? {
         ...item,
-        status: "connected" as const,
+        status: persistedProvider ? mapPersistedProviderStatus(persistedProvider.status, provider.authType) : "connected" as const,
         maskedSecret: provider.authType === "api_key" ? maskSecret(credential ?? "") : item.maskedSecret,
-        connectedAt,
+        connectedAt: persistedProvider?.last_validated_at ?? item.connectedAt,
+        lastError: persistedProvider?.last_error ?? undefined,
       }
       : item);
 

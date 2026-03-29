@@ -8,6 +8,12 @@ export const accountHealthLabel: Record<AccountHealth, string> = {
   not_connected: 'Not set up',
 };
 
+export const providerHealthLabel: Record<AccountHealth, string> = {
+  connected: 'Validated',
+  needs_reconnect: 'Needs reconnect',
+  not_connected: 'Not set up',
+};
+
 export const accountHealthClass: Record<AccountHealth, string> = {
   connected: 'connection-status-connected',
   needs_reconnect: 'connection-status-needs_key',
@@ -31,7 +37,7 @@ export const getProviderHealth = (provider: ExecutionProvider): AccountHealth =>
     return 'connected';
   }
 
-  if (provider.status === 'needs_key') {
+  if (provider.status === 'needs_key' || provider.status === 'error') {
     return 'needs_reconnect';
   }
 

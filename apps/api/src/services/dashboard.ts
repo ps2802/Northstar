@@ -40,12 +40,13 @@ type ExecutionProviderConfig = {
   key: string;
   name: string;
   auth_type: "api_key" | "cli";
-  status: "connected" | "needs_key" | "available";
+  status: "connected" | "needs_key" | "available" | "error";
   description: string;
   model_hint: string;
   is_default: boolean;
   masked_secret?: string;
   connected_at?: string;
+  last_error?: string;
 };
 
 type IntegrationConfig = {
@@ -112,12 +113,21 @@ const defaultExecutionProviders = (): WorkspaceConfiguration["execution_provider
       is_default: true
     },
     {
+      key: "openrouter",
+      name: "OpenRouter",
+      auth_type: "api_key",
+      status: "needs_key",
+      description: "Generate assets through OpenRouter's OpenAI-compatible execution path.",
+      model_hint: "openai/gpt-4.1-mini",
+      is_default: false
+    },
+    {
       key: "openai",
       name: "OpenAI",
       auth_type: "api_key",
       status: "needs_key",
-      description: "Generate assets through an OpenAI-backed execution path.",
-      model_hint: "GPT-5 family",
+      description: "Generate assets through the direct OpenAI API.",
+      model_hint: "gpt-4.1-mini",
       is_default: false
     },
     {
@@ -373,6 +383,69 @@ const parseWorkspaceConfiguration = (value: string | null | undefined): Workspac
   }
 };
 
+const toUiProviderStatus = (status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR", authType: "api_key" | "cli") => {
+  if (authType === "cli") {
+    return "available" as const;
+  }
+
+  if (status === "CONFIGURED") {
+    return "connected" as const;
+  }
+
+  if (status === "ERROR") {
+    return "error" as const;
+  }
+
+  return "needs_key" as const;
+};
+
+const withPersistedProviderTruth = async (projectId: string, config: WorkspaceConfiguration | null): Promise<WorkspaceConfiguration | null> => {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { workspaceId: true }
+  });
+
+  if (!project) {
+    return config;
+  }
+
+  const providerRecords = await prisma.executionProviderConfig.findMany({
+    where: { workspaceId: project.workspaceId },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (!providerRecords.length) {
+    return config;
+  }
+
+  const baseline = config ?? buildWorkspaceConfiguration("https://northstar.local");
+  return {
+    ...baseline,
+    execution_provider: {
+      ...baseline.execution_provider,
+      providers: baseline.execution_provider.providers.map((provider) => {
+        const record = providerRecords.find((item) => item.providerKey === provider.key);
+        if (!record) {
+          return provider;
+        }
+
+        const storedConfig = record.configJson ? JSON.parse(record.configJson) as { api_key?: string } : {};
+        return {
+          ...provider,
+          name: record.label,
+          auth_type: record.authType as "api_key" | "cli",
+          status: toUiProviderStatus(record.status, record.authType as "api_key" | "cli"),
+          model_hint: record.defaultModel ?? provider.model_hint,
+          masked_secret: storedConfig.api_key ? maskSecret(storedConfig.api_key) : provider.masked_secret,
+          connected_at: record.lastValidatedAt?.toISOString() ?? provider.connected_at,
+          last_error: record.lastError ?? undefined,
+          is_default: provider.key === baseline.execution_provider.active_provider
+        };
+      })
+    }
+  };
+};
+
 const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceConfiguration | null> => {
   const latest = await prisma.agentRun.findFirst({
     where: {
@@ -382,7 +455,7 @@ const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceCo
     orderBy: { createdAt: "desc" }
   });
 
-  return parseWorkspaceConfiguration(latest?.outputJson);
+  return withPersistedProviderTruth(projectId, parseWorkspaceConfiguration(latest?.outputJson));
 };
 
 const createWorkspaceConfigurationRun = async (projectId: string, config: WorkspaceConfiguration, summary: string) => {
@@ -884,12 +957,12 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
   if (!providerRecord) {
     throw createExecutionError("No real execution provider is configured for this workspace. Save a provider key before running a blog brief.", 409);
   }
-  if (providerRecord.providerKey !== "openai") {
-    throw createExecutionError(`${providerRecord.label} is not supported for live blog brief execution yet. Use OpenAI for now.`, 409);
+  if (!["openai", "openrouter"].includes(providerRecord.providerKey)) {
+    throw createExecutionError(`${providerRecord.label} is not supported for live blog brief execution yet. Use OpenRouter or OpenAI.`, 409);
   }
   const providerConfig = providerRecord.configJson ? JSON.parse(providerRecord.configJson) as { api_key?: string } : {};
   if (!providerConfig.api_key?.trim()) {
-    throw createExecutionError(`OpenAI is selected, but no API key is stored for ${providerRecord.label}.`, 409);
+    throw createExecutionError(`${providerRecord.label} is selected, but no API key is stored for this workspace.`, 409);
   }
 
   const activeProvider = {
@@ -951,11 +1024,11 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       ),
       project.companyProfile.guessedICP,
       {
-        providerKey: "openai",
+        providerKey: providerRecord.providerKey === "openrouter" ? "openrouter" : "openai",
         providerLabel: activeProvider.name,
         apiKey: providerConfig.api_key.trim(),
-        model: providerRecord.defaultModel ?? "gpt-4.1-mini",
-        baseUrl: providerRecord.baseUrl ?? "https://api.openai.com",
+        model: providerRecord.defaultModel ?? (providerRecord.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
+        baseUrl: providerRecord.baseUrl ?? (providerRecord.providerKey === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1"),
         revisionNote: latestRejectedApproval?.decisionNote ?? latestFounderComment?.body ?? undefined,
       }
     );

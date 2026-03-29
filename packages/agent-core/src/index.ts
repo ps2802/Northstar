@@ -18,7 +18,7 @@ export interface ExecutorContract {
 }
 
 export interface ProviderBackedExecutionOptions {
-  providerKey: "openai";
+  providerKey: "openai" | "openrouter";
   providerLabel: string;
   revisionNote?: string;
   apiKey: string;
@@ -177,6 +177,81 @@ const readOpenAIText = (payload: unknown): string | null => {
   return null;
 };
 
+const normalizeChatCompletionsUrl = (baseUrl?: string) => {
+  const normalizedBaseUrl = (baseUrl ?? "https://api.openai.com").replace(/\/+$/, "");
+  if (normalizedBaseUrl.endsWith("/chat/completions")) {
+    return normalizedBaseUrl;
+  }
+
+  if (normalizedBaseUrl.endsWith("/v1") || normalizedBaseUrl.endsWith("/api/v1")) {
+    return `${normalizedBaseUrl}/chat/completions`;
+  }
+
+  return `${normalizedBaseUrl}/v1/chat/completions`;
+};
+
+export interface OpenAiCompatibleTextOptions {
+  providerKey: "openai" | "openrouter";
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+const buildProviderHeaders = (options: OpenAiCompatibleTextOptions, requestUrl: string) => {
+  const isOpenRouter = options.providerKey === "openrouter" || requestUrl.includes("openrouter.ai");
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${options.apiKey}`,
+    ...(isOpenRouter
+      ? {
+          "HTTP-Referer": process.env.NORTHSTAR_APP_URL ?? "https://northstar.local",
+          "X-OpenRouter-Title": "Northstar",
+        }
+      : {}),
+  };
+};
+
+export const requestOpenAiCompatibleText = async (options: OpenAiCompatibleTextOptions): Promise<string> => {
+  const requestUrl = normalizeChatCompletionsUrl(options.baseUrl);
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: buildProviderHeaders(options, requestUrl),
+    body: JSON.stringify({
+      model: options.model,
+      temperature: options.temperature ?? 0.4,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      messages: [
+        {
+          role: "system",
+          content: options.systemPrompt
+        },
+        {
+          role: "user",
+          content: options.userPrompt
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${options.providerKey} generation failed: ${response.status} ${errorText}`.slice(0, 600));
+  }
+
+  const payload = await response.json();
+  const content = readOpenAIText(payload);
+  if (!content) {
+    throw new Error(`${options.providerKey} generation returned no usable content.`);
+  }
+
+  return content;
+};
+
 export class ProviderBackedBlogBriefExecutor {
   async run(task: Task, companySummary: string, guessedIcp: string, options: ProviderBackedExecutionOptions): Promise<{ nextTask: Task; artifact?: Artifact }> {
     if (task.type !== "BLOG_BRIEF") {
@@ -185,38 +260,15 @@ export class ProviderBackedBlogBriefExecutor {
       };
     }
 
-    const response = await fetch(`${options.baseUrl ?? "https://api.openai.com"}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model ?? "gpt-4.1-mini",
-        temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content: "You write sharp founder-facing blog briefs. Return only the final markdown brief."
-          },
-          {
-            role: "user",
-            content: createBlogBriefPrompt(task, companySummary, guessedIcp, options.revisionNote)
-          }
-        ]
-      })
+    const content = await requestOpenAiCompatibleText({
+      providerKey: options.providerKey,
+      apiKey: options.apiKey,
+      model: options.model ?? (options.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
+      baseUrl: options.baseUrl,
+      systemPrompt: "You write sharp founder-facing blog briefs. Return only the final markdown brief.",
+      userPrompt: createBlogBriefPrompt(task, companySummary, guessedIcp, options.revisionNote),
+      temperature: 0.4
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI generation failed: ${response.status} ${errorText}`.slice(0, 600));
-    }
-
-    const payload = await response.json();
-    const content = readOpenAIText(payload);
-    if (!content) {
-      throw new Error("OpenAI generation returned no usable brief content.");
-    }
 
     const artifact: Artifact = {
       id: `${task.id}-artifact`,

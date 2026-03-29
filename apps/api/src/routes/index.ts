@@ -114,12 +114,13 @@ const configurationSchema = z.object({
       key: z.string().trim().min(1),
       name: z.string().trim().min(1),
       auth_type: z.enum(["api_key", "cli"]),
-      status: z.enum(["connected", "needs_key", "available"]),
+      status: z.enum(["connected", "needs_key", "available", "error"]),
       description: z.string().trim().min(1),
       model_hint: z.string().trim().min(1),
       is_default: z.boolean(),
       masked_secret: z.string().trim().optional(),
-      connected_at: z.string().trim().optional()
+      connected_at: z.string().trim().optional(),
+      last_error: z.string().trim().optional()
     })).min(1)
   }).optional(),
   integrations: z.array(z.object({

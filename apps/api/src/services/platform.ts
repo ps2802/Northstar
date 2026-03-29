@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { nanoid } from "nanoid";
+import { requestOpenAiCompatibleText } from "@founder-os/agent-core";
 import { transitionTask } from "@founder-os/task-engine";
 import type { ConnectionStatus, ProviderSetupStatus, SessionRole } from "@founder-os/types";
 import { buildPlanningContext, normalizeFounderIntakeInput, type FounderIntakeInput, applyFounderContextToTask } from "../lib/founder-intake.js";
@@ -32,6 +33,77 @@ const ensureWorkspace = async (workspaceId: string) =>
   prisma.workspace.findUnique({
     where: { id: workspaceId }
   });
+
+const getProviderDefaults = (providerKey: string) => {
+  switch (providerKey) {
+    case "openrouter":
+      return {
+        baseUrl: "https://openrouter.ai/api/v1",
+        model: "openai/gpt-4.1-mini"
+      };
+    case "openai":
+      return {
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4.1-mini"
+      };
+    default:
+      return {
+        baseUrl: undefined,
+        model: undefined
+      };
+  }
+};
+
+const validateProviderConnection = async (input: {
+  providerKey: string;
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
+}) => {
+  const providerKey = input.providerKey === "openrouter" ? "openrouter" : input.providerKey === "openai" ? "openai" : null;
+  if (!providerKey) {
+    return {
+      status: "NOT_CONFIGURED" as const,
+      lastError: null,
+      validatedAt: null
+    };
+  }
+
+  if (!input.apiKey?.trim()) {
+    return {
+      status: "NOT_CONFIGURED" as const,
+      lastError: "API key required",
+      validatedAt: null
+    };
+  }
+
+  const defaults = getProviderDefaults(providerKey);
+
+  try {
+    await requestOpenAiCompatibleText({
+      providerKey,
+      apiKey: input.apiKey.trim(),
+      baseUrl: input.baseUrl?.trim() || defaults.baseUrl,
+      model: input.defaultModel?.trim() || defaults.model || "gpt-4.1-mini",
+      systemPrompt: "Return the word ok.",
+      userPrompt: "Reply with ok.",
+      temperature: 0,
+      maxTokens: 8
+    });
+
+    return {
+      status: "CONFIGURED" as const,
+      lastError: null,
+      validatedAt: new Date()
+    };
+  } catch (error) {
+    return {
+      status: "ERROR" as const,
+      lastError: error instanceof Error ? error.message : "Provider validation failed",
+      validatedAt: null
+    };
+  }
+};
 
 const createTaskComment = async (projectId: string, taskId: string, body: string, author = DEFAULT_REVISION_REQUESTED_BY) =>
   prisma.comment.create({
@@ -294,6 +366,23 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
   const nextConfig = input.api_key?.trim()
     ? { ...existingConfig, api_key: input.api_key.trim() }
     : existingConfig;
+  const defaults = getProviderDefaults(providerKey);
+  const nextBaseUrl = input.base_url?.trim() || existing?.baseUrl || defaults.baseUrl || null;
+  const nextDefaultModel = input.default_model?.trim() || existing?.defaultModel || defaults.model || null;
+  const nextApiKey = typeof nextConfig.api_key === "string" ? nextConfig.api_key : undefined;
+  const validation = input.auth_type.trim() === "api_key"
+    ? await validateProviderConnection({
+        providerKey,
+        apiKey: nextApiKey,
+        baseUrl: nextBaseUrl ?? undefined,
+        defaultModel: nextDefaultModel ?? undefined
+      })
+    : {
+        status: nextStatus,
+        lastError: null,
+        validatedAt: nextStatus === "CONFIGURED" ? new Date() : null
+      };
+  const persistedStatus = input.auth_type.trim() === "api_key" ? validation.status : nextStatus;
 
   const provider = await prisma.executionProviderConfig.upsert({
     where: {
@@ -305,13 +394,13 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
     update: {
       label: input.label?.trim() || providerKey,
       authType: input.auth_type.trim(),
-      status: nextStatus,
-      baseUrl: input.base_url?.trim() || null,
-      defaultModel: input.default_model?.trim() || null,
+      status: persistedStatus,
+      baseUrl: nextBaseUrl,
+      defaultModel: nextDefaultModel,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
       configJson: Object.keys(nextConfig).length ? JSON.stringify(nextConfig) : null,
-      lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
-      lastError: input.last_error?.trim() || null
+      lastValidatedAt: validation.validatedAt,
+      lastError: validation.lastError ?? input.last_error?.trim() ?? null
     },
     create: {
       id: nanoid(),
@@ -319,13 +408,13 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
       providerKey,
       label: input.label?.trim() || providerKey,
       authType: input.auth_type.trim(),
-      status: nextStatus,
-      baseUrl: input.base_url?.trim() || null,
-      defaultModel: input.default_model?.trim() || null,
+      status: persistedStatus,
+      baseUrl: nextBaseUrl,
+      defaultModel: nextDefaultModel,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
       configJson: Object.keys(nextConfig).length ? JSON.stringify(nextConfig) : null,
-      lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
-      lastError: input.last_error?.trim() || null
+      lastValidatedAt: validation.validatedAt,
+      lastError: validation.lastError ?? input.last_error?.trim() ?? null
     }
   });
 

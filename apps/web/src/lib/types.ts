@@ -161,12 +161,13 @@ export interface ExecutionProvider {
   id: string;
   name: string;
   authType: 'api_key' | 'cli';
-  status: 'connected' | 'needs_key' | 'available';
+  status: 'connected' | 'needs_key' | 'available' | 'error';
   description: string;
   modelHint: string;
   isDefault: boolean;
   maskedSecret?: string;
   connectedAt?: string;
+  lastError?: string;
 }
 
 export interface OnboardingDraft {
