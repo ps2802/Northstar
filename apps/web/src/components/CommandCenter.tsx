@@ -1,28 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createFounderApi } from '../lib/api';
-import { getIntegrationHealth } from '../lib/accountHealth';
+import { createFounderApi, LIVE_SESSION_REQUIRED_MESSAGE } from '../lib/api';
 import { formatDateTime } from '../lib/format';
-import { demoState, redesignBuildPlan } from '../lib/mockData';
+import { demoState } from '../lib/mockData';
+import { executableTaskTypes } from '../lib/taskConfig';
 import type {
+  AgentToolCategory,
   AppState,
   Approval,
-  ExecutionPreference,
   DashboardSection,
   FounderIntake,
   OnboardingDraft,
   Task,
+  WorkspaceTruth,
 } from '../lib/types';
 import type { NewTaskInput, TaskStatus } from '../lib/types';
 import { AddTaskForm } from './AddTaskForm';
 import { AnalyticsSummaryPanel } from './AnalyticsSummaryPanel';
 import { ApprovalQueue } from './ApprovalQueue';
-import { BuildDashboard } from './BuildDashboard';
 import { CampaignsPanel } from './CampaignsPanel';
 import { ConnectionsPanel } from './ConnectionsPanel';
 import { KanbanBoard } from './KanbanBoard';
 import { Onboarding } from './Onboarding';
-import { OverviewPanels } from './OverviewPanels';
-import { SettingsPanel } from './SettingsPanel';
 import { TaskDrawer } from './TaskDrawer';
 import { WorkspaceNav } from './WorkspaceNav';
 
@@ -30,7 +28,6 @@ const api = createFounderApi();
 const ONBOARDING_DRAFT_KEY = 'founder-os-onboarding-draft';
 const FOUNDER_CONTEXT_KEY = 'founder-os-founder-context';
 const WORKSPACE_VIEW_KEY = 'founder-os-workspace-view';
-const EXECUTION_PREFS_KEY = 'founder-os-execution-prefs';
 const SELECTED_PROJECT_KEY = 'founder-os-selected-project';
 
 const defaultFounderIntake: FounderIntake = {
@@ -40,17 +37,18 @@ const defaultFounderIntake: FounderIntake = {
   mainGoal: 'Generate more qualified pipeline from content and website improvements.',
   keyChannel: 'SEO, homepage messaging, and founder-led social content',
   whatTried: 'A few blog posts, scattered LinkedIn posts, and ad hoc website updates.',
-  priorityWork: 'Build the GTM plan first, then create the first SEO and content tasks.',
+  priorityWork: 'Clarify the GTM priorities first, then create the first SEO and content tasks.',
   competitors: 'Growth.design, Animalz, and boutique conversion agencies',
   bottleneck: 'conversion',
-  authMethod: 'google',
+  authMethod: 'email',
+  email: 'founder@acme-studio.com',
 };
 
 const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; copy: string }> = {
   command_center: {
-    eyebrow: 'Dashboard',
-    title: 'Build progress stays visible without becoming the home screen.',
-    copy: 'Use Dashboard to track the current implementation pass. Open Board when you want the live operating surface.',
+    eyebrow: 'Board',
+    title: 'The board stays the main founder surface.',
+    copy: 'Use the board to review current work, founder blockers, and the few actions that are actually live.',
   },
   board: {
     eyebrow: 'Board',
@@ -110,26 +108,26 @@ const sectionMeta: Record<DashboardSection, { eyebrow: string; title: string; co
   settings: {
     eyebrow: 'Settings',
     title: 'Workspace defaults and account state in one calm place.',
-    copy: 'Keep founder context, connected accounts, and execution defaults visible without turning settings into a second product.',
+    copy: 'Keep founder context, saved access, and execution defaults visible without turning settings into a second product.',
   },
 };
 
 const executionBlueprints: Partial<Record<DashboardSection, Array<{ title: string; points: string[] }>>> = {
   social: [
     {
-      title: 'Post generation',
+      title: 'Current limit',
       points: [
-        'Generate posts and channel-specific variants',
-        'Support campaign concepts and visual briefs',
-        'Keep approvals in the same operating flow',
+        'Social tasks stay planning-only in this founder UI',
+        'Use the board to capture angles, post directions, and visual ideas',
+        'Manual drafting and publishing still happen outside this product',
       ],
     },
     {
-      title: 'Publishing path',
+      title: 'What is still manual',
       points: [
-        'Show what is draft, reviewable, or publish-ready',
-        'Keep founder review before any real send or publish action',
-        'Prepare for later channel integrations',
+        'Publishing and channel validation are not live here yet',
+        'Saved social credentials should be treated as unverified',
+        'Founder review still happens before any real publishing work',
       ],
     },
   ],
@@ -153,54 +151,54 @@ const executionBlueprints: Partial<Record<DashboardSection, Array<{ title: strin
   ],
   content: [
     {
-      title: 'Core assets',
+      title: 'Live path',
       points: [
-        'Blog briefs and deeper drafts',
-        'Landing page copy and founder narrative assets',
-        'Email templates when content work needs lifecycle support',
+        'Blog brief generation is the only live draft path exposed here',
+        'Every generated brief should explain why it exists before review',
+        'Founder approval still happens before anything moves forward',
       ],
     },
     {
-      title: 'Approval rhythm',
+      title: 'Planning-only work',
       points: [
-        'Generated assets stay editable and reviewable',
-        'Every draft should explain why it exists',
-        'Nothing moves forward without a founder decision',
+        'Landing page copy, deeper drafts, and email assets stay manual for now',
+        'Use these tasks to prioritize and discuss work, not to imply live generation',
+        'Anything beyond the brief should be treated as a handoff, not an automated path',
       ],
     },
   ],
   crm: [
     {
-      title: 'Execution support',
+      title: 'Current limit',
       points: [
         'Lead and contact tracking stays visible',
-        'Northstar drafts follow-ups and outreach sequences',
-        'Send-ready states appear before any actual send step',
+        'Follow-ups and outreach copy are planning-only in this pass',
+        'Anything that reaches a customer still needs manual founder follow-through',
       ],
     },
     {
-      title: 'Later workflow',
+      title: 'What to use this for',
       points: [
-        'Response tracking fits the same pipeline view later',
-        'Founder tasks stay attached to contacts and stages',
-        'Outreach should never feel spammy or uncontrolled',
+        'Keep contact context tied to board priorities',
+        'Track manual next steps without implying a live send path',
+        'Outreach should stay deliberate and founder-controlled',
       ],
     },
   ],
   research: [
     {
-      title: 'Recruitment loop',
+      title: 'Current limit',
       points: [
-        'User outreach drafts and interview requests',
-        'Channel-aware recruiting copy',
-        'Founder review before outreach leaves the system',
+        'Research tasks stay manual or planning-only in this founder UI',
+        'Use the board to track interview ideas, notes, and next questions',
+        'Any outreach or recruiting still needs manual handling',
       ],
     },
     {
       title: 'Learning loop',
       points: [
-        'Feedback synthesis becomes a reusable artifact',
-        'Insights map into next tests and backlog changes',
+        'Research notes should explain what is known versus inferred',
+        'Insights should map into next tests and backlog changes',
         'Research should shape GTM, product, and messaging',
       ],
     },
@@ -254,23 +252,70 @@ const removeStoredJson = (key: string) => {
   window.localStorage.removeItem(key);
 };
 
-const defaultExecutionModeForTask = (task: Task): ExecutionPreference['mode'] => {
-  if (task.channel === 'email' || task.channel === 'x' || task.channel === 'linkedin' || task.channel === 'instagram') {
-    return 'send_ready';
-  }
-
-  if (task.category === 'website' || task.category === 'content') {
-    return 'implementation_handoff';
-  }
-
-  return 'founder_review';
+const fallbackWorkspaceTruth: WorkspaceTruth = {
+  source: 'sample',
+  freshness: 'stale',
+  sessionState: 'missing',
+  understanding: 'fallback',
+  riskyMutationsAllowed: false,
+  tokenPresent: false,
+  loadedAt: new Date(0).toISOString(),
+  session: null,
 };
 
-const defaultExecutionPreferenceForTask = (task: Task, activeProviderId: string): ExecutionPreference => {
-  return {
-    provider: activeProviderId,
-    mode: defaultExecutionModeForTask(task),
-  };
+const getWorkspaceTrustFlags = (workspaceTruth: WorkspaceTruth) => {
+  const flags: string[] = [];
+
+  if (workspaceTruth.source === 'sample') {
+    flags.push('Sample workspace');
+  }
+
+  if (workspaceTruth.source === 'cached') {
+    flags.push('Cached stale');
+  }
+
+  if (workspaceTruth.source === 'unauthenticated' || workspaceTruth.sessionState !== 'active') {
+    flags.push('Not live');
+  }
+
+  if (workspaceTruth.understanding === 'fallback') {
+    flags.push('Fallback understanding');
+  }
+
+  if (workspaceTruth.understanding === 'incomplete') {
+    flags.push('Incomplete context');
+  }
+
+  return flags;
+};
+
+const getWorkspaceTruthNotice = (workspaceTruth: WorkspaceTruth) => {
+  if (workspaceTruth.source === 'sample') {
+    return 'Sample workspace only. This founder view is not tied to a live session, so task changes, approvals, and connection updates stay read-only.';
+  }
+
+  if (workspaceTruth.source === 'cached') {
+    const reason = workspaceTruth.sessionState === 'expired'
+      ? 'the saved founder session expired'
+      : workspaceTruth.sessionState === 'invalid' || workspaceTruth.sessionState === 'revoked'
+        ? 'the saved founder session is no longer valid'
+        : 'the live API could not be confirmed';
+    return `Cached stale workspace. Live changes are disabled because ${reason}.`;
+  }
+
+  if (workspaceTruth.source === 'unauthenticated') {
+    return 'Workspace data is visible, but this founder view is not live yet. A valid founder session is missing, so risky actions stay disabled.';
+  }
+
+  if (workspaceTruth.understanding === 'fallback') {
+    return 'Company understanding is still using fallback inference. Live changes are disabled until founder context is captured and the workspace is grounded.';
+  }
+
+  if (workspaceTruth.understanding === 'incomplete') {
+    return 'Founder context is incomplete. Priorities and recommendations may be directionally useful, but they are not fully grounded yet.';
+  }
+
+  return null;
 };
 
 export function CommandCenter() {
@@ -280,7 +325,6 @@ export function CommandCenter() {
     page: 'onboarding' | 'dashboard';
     activeSection: DashboardSection;
   }>(WORKSPACE_VIEW_KEY);
-  const savedExecutionPreferences = loadStoredJson<Record<string, ExecutionPreference>>(EXECUTION_PREFS_KEY) ?? {};
   const savedProjectId = loadStoredJson<string>(SELECTED_PROJECT_KEY);
   const hasSavedView = Boolean(savedView);
   const initialSection = savedView?.activeSection === 'command_center' ? 'board' : savedView?.activeSection ?? 'board';
@@ -295,7 +339,6 @@ export function CommandCenter() {
   const [founderIntake, setFounderIntake] = useState<FounderIntake | null>(savedFounderContext ?? savedOnboardingDraft?.intake ?? defaultFounderIntake);
   const [onboardingDraft, setOnboardingDraft] = useState<OnboardingDraft | null>(savedOnboardingDraft);
   const [onboardingResetKey, setOnboardingResetKey] = useState(0);
-  const [executionPreferences, setExecutionPreferences] = useState<Record<string, ExecutionPreference>>(savedExecutionPreferences);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapNotice, setBootstrapNotice] = useState<string | null>(null);
@@ -312,6 +355,7 @@ export function CommandCenter() {
   const [connectIntegrationId, setConnectIntegrationId] = useState<string | null>(null);
   const [disconnectIntegrationId, setDisconnectIntegrationId] = useState<string | null>(null);
   const [syncIntegrationId, setSyncIntegrationId] = useState<string | null>(null);
+  const [selectAgentWrapperId, setSelectAgentWrapperId] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [addTaskError, setAddTaskError] = useState<string | null>(null);
   const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
@@ -319,6 +363,7 @@ export function CommandCenter() {
   const [commentErrors, setCommentErrors] = useState<Record<string, string>>({});
   const [providerErrors, setProviderErrors] = useState<Record<string, string>>({});
   const [integrationErrors, setIntegrationErrors] = useState<Record<string, string>>({});
+  const [agentWrapperErrors, setAgentWrapperErrors] = useState<Record<string, string>>({});
   const [boardQuery, setBoardQuery] = useState('');
   const boardSearchRef = useRef<HTMLInputElement | null>(null);
 
@@ -341,7 +386,7 @@ export function CommandCenter() {
           setSelectedProjectId(null);
           if (!hasSavedView) {
             setPage('onboarding');
-            setActiveSection('command_center');
+            setActiveSection('board');
           }
           return;
         }
@@ -389,8 +434,15 @@ export function CommandCenter() {
           if (cachedState.founderIntake) {
             setFounderIntake(cachedState.founderIntake);
           }
-          setBootstrapNotice('Live workspace data could not be loaded. Showing cached state until the API is reachable again.');
+          setBootstrapNotice(null);
         } else {
+          if (error instanceof Error && error.message === LIVE_SESSION_REQUIRED_MESSAGE) {
+            setAvailableProjects([]);
+            setSelectedProjectId(null);
+            setPage('onboarding');
+            setActiveSection('board');
+            return;
+          }
           setAvailableProjects([]);
           setSelectedProjectId(null);
           setBootstrapError(getErrorMessage(error));
@@ -426,10 +478,6 @@ export function CommandCenter() {
   }, [founderIntake]);
 
   useEffect(() => {
-    persistStoredJson(EXECUTION_PREFS_KEY, executionPreferences);
-  }, [executionPreferences]);
-
-  useEffect(() => {
     if (selectedProjectId) {
       persistStoredJson(SELECTED_PROJECT_KEY, selectedProjectId);
     }
@@ -463,12 +511,6 @@ export function CommandCenter() {
       if (event.shiftKey && event.key.toLowerCase() === 'a') {
         event.preventDefault();
         setActiveSection('approvals');
-        return;
-      }
-
-      if (event.shiftKey && event.key.toLowerCase() === 'c') {
-        event.preventDefault();
-        setActiveSection('command_center');
       }
     };
 
@@ -481,22 +523,42 @@ export function CommandCenter() {
     [state.tasks],
   );
 
+  const liveTaskIds = useMemo(
+    () => new Set(state.tasks.filter((task) => executableTaskTypes.has(task.type)).map((task) => task.id)),
+    [state.tasks],
+  );
+
+  const liveTasks = useMemo(
+    () => state.tasks.filter((task) => liveTaskIds.has(task.id)),
+    [liveTaskIds, state.tasks],
+  );
+
+  const liveArtifacts = useMemo(
+    () => state.artifacts.filter((artifact) => liveTaskIds.has(artifact.taskId)),
+    [liveTaskIds, state.artifacts],
+  );
+
+  const liveApprovals = useMemo(
+    () => state.approvals.filter((approval) => liveTaskIds.has(approval.taskId)),
+    [liveTaskIds, state.approvals],
+  );
+
   const selectedArtifact = useMemo(
-    () => state.artifacts.find((artifact) => artifact.taskId === selectedTask?.id) ?? null,
-    [selectedTask, state.artifacts],
+    () => liveArtifacts.find((artifact) => artifact.taskId === selectedTask?.id) ?? null,
+    [liveArtifacts, selectedTask],
   );
 
   const selectedApproval = useMemo<Approval | null>(() => {
-    if (!selectedTask) {
+    if (!selectedTask || !executableTaskTypes.has(selectedTask.type)) {
       return null;
     }
 
     return (
-      state.approvals.find((approval) => approval.taskId === selectedTask.id && approval.status === 'pending')
-      ?? state.approvals.find((approval) => approval.taskId === selectedTask.id)
+      liveApprovals.find((approval) => approval.taskId === selectedTask.id && approval.status === 'pending')
+      ?? liveApprovals.find((approval) => approval.taskId === selectedTask.id)
       ?? null
     );
-  }, [selectedTask, state.approvals]);
+  }, [liveApprovals, selectedTask]);
 
   const comments = useMemo(
     () => state.comments.filter((comment) => comment.taskId === selectedTask?.id),
@@ -504,10 +566,23 @@ export function CommandCenter() {
   );
 
   const pendingApprovals = useMemo(
-    () => state.approvals.filter((approval) => approval.status === 'pending'),
-    [state.approvals],
+    () => liveApprovals.filter((approval) => approval.status === 'pending'),
+    [liveApprovals],
   );
   const hasExistingWorkspace = availableProjects.length > 0 && selectedProjectId !== null;
+  const workspaceTruth = state.workspaceTruth ?? fallbackWorkspaceTruth;
+  const workspaceTruthNotice = getWorkspaceTruthNotice(workspaceTruth);
+  const workspaceTrustFlags = getWorkspaceTrustFlags(workspaceTruth);
+  const lastLiveLoadLabel = workspaceTruth.loadedAt === fallbackWorkspaceTruth.loadedAt
+    ? 'Last live load unavailable'
+    : `Last live load ${formatDateTime(workspaceTruth.loadedAt)}`;
+  const riskyMutationDisabledMessage = workspaceTruth.source === 'cached'
+    ? 'This workspace is showing cached stale data. Live changes are disabled until the founder session is restored.'
+    : workspaceTruth.source === 'sample'
+      ? 'This founder view is sample data only. Live changes are disabled.'
+      : workspaceTruth.understanding === 'fallback'
+        ? 'This workspace is still using fallback company understanding. Live changes are disabled until founder context is captured.'
+        : 'This workspace is not live yet. Founder changes stay disabled until a valid session is available.';
 
   const boardVisibleTasks = useMemo(() => {
     const query = boardQuery.trim().toLowerCase();
@@ -525,18 +600,25 @@ export function CommandCenter() {
     [sortedTasks],
   );
 
-  const accountSummary = useMemo(
-    () => state.integrations.reduce((summary, integration) => {
-      const stateKey = getIntegrationHealth(integration);
-      summary[stateKey] += 1;
-      return summary;
-    }, {
-      connected: 0,
-      needs_reconnect: 0,
-      not_connected: 0,
-    }),
-    [state.integrations],
-  );
+  const accountSummary = useMemo(() => ({
+    saved_unverified: state.integrations.filter((integration) => integration.status === 'connected').length,
+    needs_key: state.integrations.filter((integration) => integration.status === 'needs_key').length,
+    planned: state.integrations.filter((integration) => integration.status === 'planned').length,
+  }), [state.integrations]);
+
+  const providerSummary = useMemo(() => ({
+    saved_unverified: state.executionProviders.filter((provider) => provider.status === 'connected').length,
+    needs_key: state.executionProviders.filter((provider) => provider.status === 'needs_key').length,
+    local_only: state.executionProviders.filter((provider) => provider.status === 'available').length,
+  }), [state.executionProviders]);
+  const agentStackSummary = useMemo(() => ({
+    selected: state.agentToolWrappers.filter((wrapper) => wrapper.selectedVendorId).length,
+    unselected: state.agentToolWrappers.filter((wrapper) => !wrapper.selectedVendorId).length,
+  }), [state.agentToolWrappers]);
+  const workspaceLearningSummary = useMemo(() => ({
+    preferences: state.workspaceLearning.preferences.length,
+    recentFeedback: state.workspaceLearning.recentFeedback.length,
+  }), [state.workspaceLearning]);
   const sectionTasks = boardVisibleTasks.filter((task) => {
     switch (activeSection) {
       case 'seo':
@@ -601,7 +683,7 @@ export function CommandCenter() {
 
     return {
       title: 'Nothing is queued in this section yet.',
-      copy: 'Northstar will populate this area once related work is scored or connected workflows unlock more execution.',
+      copy: 'This area populates once related work is scored or saved tool access creates follow-up work.',
       actionLabel: 'Open board',
       onAction: () => setActiveSection('board'),
     };
@@ -616,6 +698,25 @@ export function CommandCenter() {
     setSelectedTask((current) => current ? updated.tasks.find((task) => task.id === current.id) ?? null : null);
   };
 
+  const applyFailureWorkspaceState = useCallback((error: unknown) => {
+    const status = typeof error === 'object' && error && 'status' in error ? Number((error as { status?: number }).status) : undefined;
+    if (status !== 401) {
+      return;
+    }
+
+    const cached = api.getCachedState();
+    if (cached) {
+      applyState(cached);
+      setBootstrapNotice(getWorkspaceTruthNotice(cached.workspaceTruth ?? fallbackWorkspaceTruth));
+      return;
+    }
+
+    setAvailableProjects([]);
+    setSelectedProjectId(null);
+    setPage('onboarding');
+    setActiveSection('board');
+  }, []);
+
   const handleOnboardingDraftChange = useCallback((draft: OnboardingDraft) => {
     setOnboardingDraft(draft);
     persistStoredJson(ONBOARDING_DRAFT_KEY, draft);
@@ -627,17 +728,6 @@ export function CommandCenter() {
     setOnboardingError(null);
     setOnboardingResetKey((current) => current + 1);
   }, []);
-
-  const updateExecutionPreference = useCallback((task: Task, next: Partial<ExecutionPreference>) => {
-    setExecutionPreferences((current) => ({
-      ...current,
-      [task.id]: {
-        ...defaultExecutionPreferenceForTask(task, state.activeProviderId),
-        ...current[task.id],
-        ...next,
-      },
-    }));
-  }, [state.activeProviderId]);
 
   const handleAnalyze = async (intake: FounderIntake) => {
     setOnboardingError(null);
@@ -672,6 +762,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setAddTaskError(getErrorMessage(error));
       return false;
     } finally {
@@ -688,6 +779,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setStatusErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -700,12 +792,11 @@ export function CommandCenter() {
     setExecuteTaskId(taskId);
 
     try {
-      const task = state.tasks.find((item) => item.id === taskId);
-      const preference = task ? (executionPreferences[taskId] ?? defaultExecutionPreferenceForTask(task, state.activeProviderId)) : undefined;
-      const updated = await api.executeTask(taskId, preference);
+      const updated = await api.executeTask(taskId);
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -722,6 +813,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -738,6 +830,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -754,6 +847,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setCommentErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -770,6 +864,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setProviderErrors((current) => ({ ...clearTaskError(current, providerId), [providerId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -786,6 +881,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setProviderErrors((current) => ({ ...clearTaskError(current, providerId), [providerId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -802,6 +898,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -818,6 +915,7 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
@@ -834,12 +932,49 @@ export function CommandCenter() {
       applyState(updated);
       return true;
     } catch (error) {
+      applyFailureWorkspaceState(error);
       setIntegrationErrors((current) => ({ ...clearTaskError(current, integrationId), [integrationId]: getErrorMessage(error) }));
       return false;
     } finally {
       setSyncIntegrationId((current) => current === integrationId ? null : current);
     }
   };
+
+  const handleSelectAgentToolVendor = async (wrapperId: AgentToolCategory, vendorId: string) => {
+    setAgentWrapperErrors((current) => clearTaskError(current, wrapperId));
+    setSelectAgentWrapperId(wrapperId);
+
+    try {
+      const updated = await api.selectAgentToolVendor(wrapperId, vendorId);
+      applyState(updated);
+      return true;
+    } catch (error) {
+      applyFailureWorkspaceState(error);
+      setAgentWrapperErrors((current) => ({ ...clearTaskError(current, wrapperId), [wrapperId]: getErrorMessage(error) }));
+      return false;
+    } finally {
+      setSelectAgentWrapperId((current) => current === wrapperId ? null : current);
+    }
+  };
+
+  const handleReadOnlyStatusChange = async (taskId: string) => {
+    setStatusErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: riskyMutationDisabledMessage }));
+    return false;
+  };
+
+  const handleReadOnlyApproveArtifact = async (taskId: string) => {
+    setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: riskyMutationDisabledMessage }));
+    return false;
+  };
+
+  const handleReadOnlyRejectArtifact = async (taskId: string) => {
+    setDecisionErrors((current) => ({ ...clearTaskError(current, taskId), [taskId]: riskyMutationDisabledMessage }));
+    return false;
+  };
+
+  const statusChangeHandler = workspaceTruth.riskyMutationsAllowed ? handleStatusChange : handleReadOnlyStatusChange;
+  const approveHandler = workspaceTruth.riskyMutationsAllowed ? handleApproveArtifact : handleReadOnlyApproveArtifact;
+  const rejectHandler = workspaceTruth.riskyMutationsAllowed ? handleRejectArtifact : handleReadOnlyRejectArtifact;
 
   const renderTaskList = (
     title: string,
@@ -908,34 +1043,33 @@ export function CommandCenter() {
   };
 
   const renderSectionContent = () => {
-    if (activeSection === 'command_center') {
+    if (activeSection === 'command_center' || activeSection === 'board') {
       return (
         <div className="section-stack">
-          <BuildDashboard phases={redesignBuildPlan} />
-          <OverviewPanels approvals={state.approvals} founderIntake={founderIntake} tasks={sortedTasks} />
-        </div>
-      );
-    }
-
-    if (activeSection === 'board') {
-      return (
-        <div className="section-stack">
-          <KanbanBoard
-            approvals={state.approvals}
-            pendingTaskId={statusChangeTaskId}
-            statusErrors={statusErrors}
-            tasks={boardVisibleTasks}
-            onTaskOpen={(task) => setSelectedTask(task)}
-            onStatusChange={handleStatusChange}
-          />
+          <div className={workspaceTruth.riskyMutationsAllowed ? undefined : 'workspace-readonly-surface'}>
+            <KanbanBoard
+              approvals={liveApprovals}
+              pendingTaskId={statusChangeTaskId}
+              statusErrors={statusErrors}
+              tasks={boardVisibleTasks}
+              onTaskOpen={(task) => setSelectedTask(task)}
+              onStatusChange={statusChangeHandler}
+            />
+          </div>
           <section className="rail-card section-card">
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Add task</p>
-                <h2>Queue a new task for the board</h2>
+                <h2>Queue planning work for the board</h2>
               </div>
             </div>
-            <AddTaskForm error={addTaskError} loading={addTaskLoading} onAdd={handleAddTask} />
+            <AddTaskForm
+              error={addTaskError}
+              loading={addTaskLoading}
+              mutationsAllowed={workspaceTruth.riskyMutationsAllowed}
+              disabledReason={riskyMutationDisabledMessage}
+              onAdd={handleAddTask}
+            />
           </section>
         </div>
       );
@@ -953,8 +1087,8 @@ export function CommandCenter() {
             </div>
             <AnalyticsSummaryPanel
               agentRuns={state.agentRuns}
-              approvals={state.approvals}
-              artifacts={state.artifacts}
+              approvals={liveApprovals}
+              artifacts={liveArtifacts}
               founderIntake={founderIntake}
               goals={state.goals}
               initiatives={state.initiatives}
@@ -1037,8 +1171,8 @@ export function CommandCenter() {
         <div className="section-stack">
           <CampaignsPanel
             agentRuns={state.agentRuns}
-            approvals={state.approvals}
-            artifacts={state.artifacts}
+            approvals={liveApprovals}
+            artifacts={liveArtifacts}
             founderIntake={founderIntake}
             goals={state.goals}
             initiatives={state.initiatives}
@@ -1053,7 +1187,7 @@ export function CommandCenter() {
       return (
         <div className="section-stack">
           {renderCapabilityPanels('social')}
-          {renderTaskList('Social execution', 'Post generation, variants, campaign concepts, and visual support', sectionTasks, getSectionEmptyState('social'))}
+          {renderTaskList('Social planning', 'Social ideas, post directions, and visual concepts tracked for manual follow-through', sectionTasks, getSectionEmptyState('social'))}
         </div>
       );
     }
@@ -1071,14 +1205,16 @@ export function CommandCenter() {
       return (
         <div className="section-stack">
           <ApprovalQueue
-            approvals={state.approvals}
-            artifacts={state.artifacts}
+            approvals={liveApprovals}
+            artifacts={liveArtifacts}
             decisionErrorByTaskId={decisionErrors}
+            disabledReason={riskyMutationDisabledMessage}
+            mutationsAllowed={workspaceTruth.riskyMutationsAllowed}
             pendingApproveTaskId={approveTaskId}
             pendingRejectTaskId={rejectTaskId}
-            tasks={state.tasks}
-            onApprove={handleApproveArtifact}
-            onReject={handleRejectArtifact}
+            tasks={liveTasks}
+            onApprove={approveHandler}
+            onReject={rejectHandler}
             onTaskOpen={(task) => setSelectedTask(task)}
           />
         </div>
@@ -1089,18 +1225,22 @@ export function CommandCenter() {
       return (
         <div className="section-stack">
           <ConnectionsPanel
+            agentToolWrappers={state.agentToolWrappers}
+            agentWrapperErrorById={agentWrapperErrors}
             connectErrorById={integrationErrors}
-            founderSession={state.founderSession}
             founderIntake={founderIntake}
             providerErrorById={providerErrors}
+            workspaceTruth={workspaceTruth}
             executionProviders={state.executionProviders}
             activeProviderId={state.activeProviderId}
             integrations={state.integrations}
+            pendingAgentWrapperId={selectAgentWrapperId}
             pendingProviderConnectId={connectProviderId}
             pendingProviderActivateId={activateProviderId}
             pendingConnectId={connectIntegrationId}
             pendingDisconnectId={disconnectIntegrationId}
             pendingSyncId={syncIntegrationId}
+            onSelectAgentToolVendor={handleSelectAgentToolVendor}
             onProviderConnect={handleConnectProvider}
             onProviderActivate={handleActivateProvider}
             onConnect={handleConnectIntegration}
@@ -1115,15 +1255,161 @@ export function CommandCenter() {
     if (activeSection === 'settings') {
       return (
         <div className="section-stack">
-          <SettingsPanel
-            activeProviderId={state.activeProviderId}
-            executionProviders={state.executionProviders}
-            founderIntake={founderIntake}
-            integrations={state.integrations}
-            profile={state.profile}
-            project={state.project}
-            onOpenConnections={() => setActiveSection('connections')}
-          />
+          <section className="rail-card section-card">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Settings</p>
+                <h2>Workspace context</h2>
+              </div>
+            </div>
+
+            <div className="settings-grid">
+              <article className="settings-card">
+                <span>Website</span>
+                <strong>{founderIntake?.websiteUrl ?? state.project.websiteUrl}</strong>
+              </article>
+              <article className="settings-card">
+                <span>Audience</span>
+                <strong>{founderIntake?.icp || state.profile.guessedIcp || 'Fallback understanding only'}</strong>
+              </article>
+              <article className="settings-card">
+                <span>Main goal</span>
+                <strong>{founderIntake?.mainGoal || 'Incomplete founder context'}</strong>
+              </article>
+              <article className="settings-card">
+                <span>Priority channel</span>
+                <strong>{founderIntake?.keyChannel || 'Not set yet'}</strong>
+              </article>
+            </div>
+          </section>
+
+          <section className="rail-card section-card">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Saved access</p>
+                <h2>Credential truth</h2>
+              </div>
+              <button className="ghost-button" type="button" onClick={() => setActiveSection('connections')}>
+                Open connections
+              </button>
+            </div>
+
+            <div className="settings-connection-summary">
+              <article className="settings-detail-card">
+                <span>Workflow tools</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{accountSummary.saved_unverified} saved, unverified</span>
+                  <span className="connection-status-needs_key">{accountSummary.needs_key} credentials missing</span>
+                  <span className="connection-status-planned">{accountSummary.planned} not set up</span>
+                </div>
+              </article>
+              <article className="settings-detail-card">
+                <span>Execution providers</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{providerSummary.saved_unverified} saved, unverified</span>
+                  <span className="connection-status-needs_key">{providerSummary.needs_key} key required</span>
+                  <span className="connection-status-planned">{providerSummary.local_only} local only</span>
+                </div>
+              </article>
+              <article className="settings-detail-card">
+                <span>Agent stack wrappers</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{agentStackSummary.selected} preferred vendors set</span>
+                  <span className="connection-status-planned">{agentStackSummary.unselected} not chosen</span>
+                </div>
+              </article>
+              <article className="settings-detail-card">
+                <span>Northstar learning</span>
+                <div className="settings-chip-row">
+                  <span className="connection-status-connected">{workspaceLearningSummary.preferences} learned preferences</span>
+                  <span className="connection-status-planned">{workspaceLearningSummary.recentFeedback} recent founder signals</span>
+                </div>
+              </article>
+            </div>
+
+            <div className="settings-detail-grid">
+              <article className="settings-detail-card settings-detail-card-lead">
+                <span>Company summary</span>
+                <strong>{state.profile.companyName}</strong>
+                <p>{state.profile.summary}</p>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Workflow tools</span>
+                <div className="settings-status-list">
+                  {state.integrations.map((integration) => (
+                    <div key={integration.id} className="settings-status-row">
+                      <strong>{integration.name}</strong>
+                      <span>
+                        {integration.status === 'connected'
+                          ? 'Saved, unverified'
+                          : integration.status === 'needs_key'
+                            ? 'Credential required'
+                            : 'Not set up'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Execution providers</span>
+                <div className="settings-status-list">
+                  {state.executionProviders.map((provider) => (
+                    <div key={provider.id} className="settings-status-row">
+                      <strong>{provider.name}{state.activeProviderId === provider.id ? ' (preferred)' : ''}</strong>
+                      <span>
+                        {provider.status === 'connected'
+                          ? 'Saved, unverified'
+                          : provider.status === 'needs_key'
+                            ? 'Key required'
+                            : 'Local only'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Agent stack wrappers</span>
+                <div className="settings-status-list">
+                  {state.agentToolWrappers.map((wrapper) => (
+                    <div key={wrapper.id} className="settings-status-row">
+                      <strong>{wrapper.label}</strong>
+                      <span>{wrapper.vendors.find((vendor) => vendor.id === wrapper.selectedVendorId)?.name ?? 'Not chosen'}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="settings-detail-card">
+                <span>Northstar learning</span>
+                <div className="settings-status-list">
+                  {state.workspaceLearning.preferences.length ? state.workspaceLearning.preferences.map((preference) => (
+                    <div key={preference} className="settings-status-row">
+                      <strong>Preference</strong>
+                      <span>{preference}</span>
+                    </div>
+                  )) : (
+                    <div className="settings-status-row">
+                      <strong>No learned preferences yet</strong>
+                      <span>Founder comments and change requests will sharpen future prioritization here.</span>
+                    </div>
+                  )}
+                </div>
+                {state.workspaceLearning.recentFeedback.length ? (
+                  <div className="settings-status-list">
+                    {state.workspaceLearning.recentFeedback.slice(0, 3).map((signal) => (
+                      <div key={signal.id} className="settings-status-row">
+                        <strong>{signal.source === 'approval_rejection' ? 'Change request' : 'Founder comment'}</strong>
+                        <span>{signal.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            </div>
+          </section>
         </div>
       );
     }
@@ -1244,13 +1530,20 @@ export function CommandCenter() {
                   <label className="workspace-project-switcher">
                     <span>Workspace</span>
                     <select
+                      disabled={workspaceTruth.source !== 'live' || workspaceTruth.sessionState !== 'active'}
                       value={selectedProjectId ?? state.project.id}
                       onChange={async (event) => {
+                        const previousProjectId = selectedProjectId ?? state.project.id;
                         const nextProjectId = event.target.value;
                         setSelectedProjectId(nextProjectId);
-                        const updated = await api.getState(nextProjectId);
-                        applyState(updated);
-                        setSelectedTask(null);
+                        try {
+                          const updated = await api.getState(nextProjectId);
+                          applyState(updated);
+                          setSelectedTask(null);
+                        } catch (error) {
+                          applyFailureWorkspaceState(error);
+                          setSelectedProjectId(previousProjectId);
+                        }
                       }}
                     >
                       {availableProjects.map((project) => (
@@ -1269,15 +1562,15 @@ export function CommandCenter() {
                       placeholder="Search tasks, rationale, or output"
                     />
                   </label>
-                  <div className="workspace-connection-strip" aria-label="Connected account state">
+                  <div className="workspace-connection-strip" aria-label="Connection truth">
                     <span className="workspace-connection-chip connection-status-connected">
-                      {accountSummary.connected} connected
+                      {accountSummary.saved_unverified} saved, unverified
                     </span>
                     <span className="workspace-connection-chip connection-status-needs_key">
-                      {accountSummary.needs_reconnect} needs reconnect
+                      {accountSummary.needs_key} credentials missing
                     </span>
                     <span className="workspace-connection-chip connection-status-planned">
-                      {accountSummary.not_connected} not connected
+                      {accountSummary.planned} not set up
                     </span>
                   </div>
                   <button className="primary-button" type="button" disabled={activeSection === 'board'} onClick={() => setActiveSection('board')}>
@@ -1285,9 +1578,21 @@ export function CommandCenter() {
                   </button>
                 </div>
               </div>
+
+              <div className="workspace-trust-strip" aria-label="Workspace trust state">
+                {workspaceTrustFlags.map((flag) => (
+                  <span key={flag} className="workspace-trust-chip">
+                    {flag}
+                  </span>
+                ))}
+                <span className="workspace-trust-chip workspace-trust-chip-muted">
+                  {lastLiveLoadLabel}
+                </span>
+              </div>
             </header>
 
             {bootstrapNotice ? <div className="workspace-status-banner">{bootstrapNotice}</div> : null}
+            {workspaceTruthNotice ? <div className="workspace-status-banner workspace-status-banner-alert">{workspaceTruthNotice}</div> : null}
 
             {renderSectionContent()}
           </div>
@@ -1303,25 +1608,18 @@ export function CommandCenter() {
         commentLoading={commentTaskId === selectedTask?.id}
         comments={comments}
         decisionError={selectedTask ? decisionErrors[selectedTask.id] ?? null : null}
-        executionPreference={selectedTask ? executionPreferences[selectedTask.id] ?? defaultExecutionPreferenceForTask(selectedTask, state.activeProviderId) : null}
-        executionProviders={state.executionProviders}
         executeLoading={executeTaskId === selectedTask?.id}
-        activeProviderId={state.activeProviderId}
         founderIntake={founderIntake}
         integrations={state.integrations}
+        workspaceTruth={workspaceTruth}
+        mutationsAllowed={workspaceTruth.riskyMutationsAllowed}
+        disabledReason={riskyMutationDisabledMessage}
         onAddComment={handleAddComment}
-        onApprove={handleApproveArtifact}
+        onApprove={approveHandler}
         onClose={() => setSelectedTask(null)}
-        onExecutionPreferenceChange={(next) => {
-          if (!selectedTask) {
-            return;
-          }
-
-          updateExecutionPreference(selectedTask, next);
-        }}
         onExecute={handleExecuteTask}
         onOpenConnections={() => setActiveSection('connections')}
-        onReject={handleRejectArtifact}
+        onReject={rejectHandler}
         rejectLoading={rejectTaskId === selectedTask?.id}
         task={selectedTask}
       />

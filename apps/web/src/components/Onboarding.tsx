@@ -22,7 +22,8 @@ const defaultIntake: FounderIntake = {
   priorityWork: 'Build the GTM plan first, then create the first SEO and content tasks.',
   competitors: 'Growth.design, Animalz, and boutique conversion agencies',
   bottleneck: 'conversion',
-  authMethod: 'google',
+  authMethod: 'email',
+  email: 'founder@acme-studio.com',
 };
 
 const steps = [
@@ -61,7 +62,7 @@ export function Onboarding({
     }
 
     if (step === 2) {
-      return intake.authMethod === 'google' || Boolean(intake.email?.trim());
+      return Boolean(intake.email?.trim());
     }
 
     return false;
@@ -120,7 +121,8 @@ export function Onboarding({
 
           const created = await onAnalyze({
             ...intake,
-            email: intake.authMethod === 'email' ? intake.email?.trim() : undefined,
+            authMethod: 'email',
+            email: intake.email?.trim(),
           });
 
           if (created) {
@@ -198,7 +200,7 @@ export function Onboarding({
             <div>
               <p className="eyebrow">Step 2</p>
               <h2>Answer the founder follow-ups</h2>
-              <p>Northstar uses this to tune scoring, planning, and who should own the next wave of work.</p>
+              <p>Northstar uses this to tune scoring, planning, and ownership on the board.</p>
             </div>
 
             <div className="form-grid">
@@ -296,39 +298,27 @@ export function Onboarding({
 
             <div className="auth-grid">
               <button
-                className={`auth-card ${intake.authMethod === 'google' ? 'auth-card-active' : ''}`}
-                type="button"
-                onClick={() => updateIntake('authMethod', 'google')}
-              >
-                <span className="eyebrow">Google</span>
-                <strong>Continue with Google</strong>
-                <p>Fastest path for a founder workspace with Drive and Gmail later.</p>
-              </button>
-
-              <button
-                className={`auth-card ${intake.authMethod === 'email' ? 'auth-card-active' : ''}`}
+                className="auth-card auth-card-active"
                 type="button"
                 onClick={() => updateIntake('authMethod', 'email')}
               >
-                <span className="eyebrow">Email</span>
-                <strong>Use work email</strong>
-                <p>Good when the founder wants a simple email/password workspace first.</p>
+                <span className="eyebrow">Founder access</span>
+                <strong>Use founder work email</strong>
+                <p>Northstar uses the founder email plus workspace website to create or restore the authenticated workspace session.</p>
               </button>
             </div>
 
-            {intake.authMethod === 'email' ? (
-              <label>
-                Work email
-                <input
-                  value={intake.email ?? ''}
-                  onChange={(event) => updateIntake('email', event.target.value)}
-                  autoComplete="email"
-                  placeholder="founder@company.com"
-                  disabled={loading}
-                  required
-                />
-              </label>
-            ) : null}
+            <label>
+              Founder work email
+              <input
+                value={intake.email ?? ''}
+                onChange={(event) => updateIntake('email', event.target.value)}
+                autoComplete="email"
+                placeholder="founder@company.com"
+                disabled={loading}
+                required
+              />
+            </label>
 
             <div className="launchpad-checklist">
               <div>
@@ -364,7 +354,7 @@ export function Onboarding({
           )}
 
           <button className="primary-button" type="submit" disabled={loading || !stepValid}>
-            {step === steps.length - 1 ? (loading ? 'Building workspace...' : 'Create founder dashboard') : 'Continue'}
+            {step === steps.length - 1 ? (loading ? 'Opening workspace...' : 'Create or restore founder dashboard') : 'Continue'}
           </button>
         </div>
       </form>

@@ -5,10 +5,22 @@ import type { ConnectionStatus, ProviderSetupStatus, SessionRole } from "@founde
 import { buildPlanningContext, normalizeFounderIntakeInput, type FounderIntakeInput, applyFounderContextToTask } from "../lib/founder-intake.js";
 import { prisma } from "../lib/prisma.js";
 import { serializeApproval, serializeArtifactRevision, serializeExecutionJob, serializeExecutionProviderConfig, serializeFounderIntake, serializeIntegrationConnection, serializeTask, serializeWorkspaceSession } from "../lib/serializers.js";
-import { getDashboard, reprioritizeProjectTasks, upsertTaskRecord } from "./dashboard.js";
+import { getDashboard, recordFounderFeedback, reprioritizeProjectTasks, upsertTaskRecord } from "./dashboard.js";
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const DEFAULT_REVISION_REQUESTED_BY = "founder";
+const normalizeWebsiteHost = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    return new URL(normalized.startsWith("http") ? normalized : `https://${normalized}`).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+};
 
 const ensureProject = async (projectId: string) =>
   prisma.project.findUnique({
@@ -107,12 +119,16 @@ export const createWorkspaceSession = async (input: {
   role?: SessionRole;
   ttl_hours?: number;
 }) => {
-  let workspaceId = input.workspace_id;
+  const requestedWorkspaceId = input.workspace_id?.trim() || undefined;
+  let workspaceId = requestedWorkspaceId;
   let founderIntakeId: string | null = null;
 
   if (input.project_id) {
     const project = await ensureProject(input.project_id);
     if (!project) {
+      return null;
+    }
+    if (requestedWorkspaceId && project.workspaceId !== requestedWorkspaceId) {
       return null;
     }
     workspaceId = project.workspaceId;
@@ -148,6 +164,59 @@ export const createWorkspaceSession = async (input: {
   return {
     session: serializeWorkspaceSession(session),
     token
+  };
+};
+
+export const createWorkspaceSessionFromAccess = async (input: {
+  website_url: string;
+  email: string;
+  name?: string;
+  role?: SessionRole;
+  ttl_hours?: number;
+}) => {
+  const requestedHost = normalizeWebsiteHost(input.website_url);
+  const email = input.email.trim().toLowerCase();
+  if (!requestedHost || !email) {
+    return null;
+  }
+
+  const matches = await prisma.founderIntake.findMany({
+    where: {
+      founderEmail: email
+    },
+    include: {
+      project: {
+        include: {
+          workspace: true
+        }
+      }
+    },
+    orderBy: {
+      updatedAt: "desc"
+    }
+  });
+
+  const intake = matches.find((record) => normalizeWebsiteHost(record.project.websiteUrl) === requestedHost);
+  if (!intake) {
+    return null;
+  }
+
+  const result = await createWorkspaceSession({
+    workspace_id: intake.project.workspaceId,
+    project_id: intake.projectId,
+    email,
+    name: input.name?.trim() || intake.founderName?.trim() || intake.project.name,
+    role: input.role,
+    ttl_hours: input.ttl_hours
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    ...result,
+    dashboard: await getDashboard(intake.projectId)
   };
 };
 
@@ -204,7 +273,6 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
   base_url?: string;
   default_model?: string;
   scopes?: string[];
-  config?: Record<string, unknown>;
   last_error?: string;
 }) => {
   const workspace = await ensureWorkspace(workspaceId);
@@ -228,7 +296,6 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
       baseUrl: input.base_url?.trim() || null,
       defaultModel: input.default_model?.trim() || null,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
-      configJson: input.config ? JSON.stringify(input.config) : null,
       lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     },
@@ -242,7 +309,6 @@ export const upsertProviderConfig = async (workspaceId: string, providerKey: str
       baseUrl: input.base_url?.trim() || null,
       defaultModel: input.default_model?.trim() || null,
       scopesJson: JSON.stringify((input.scopes ?? []).map((scope) => scope.trim()).filter(Boolean)),
-      configJson: input.config ? JSON.stringify(input.config) : null,
       lastValidatedAt: nextStatus === "CONFIGURED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     }
@@ -266,8 +332,6 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
   auth_type: string;
   status?: ConnectionStatus;
   external_account_id?: string;
-  metadata?: Record<string, unknown>;
-  sync_state?: Record<string, unknown>;
   last_error?: string;
 }) => {
   const workspace = await ensureWorkspace(workspaceId);
@@ -297,8 +361,6 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
       authType: input.auth_type.trim(),
       status: nextStatus,
       externalAccountId: input.external_account_id?.trim() || null,
-      metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
-      syncStateJson: input.sync_state ? JSON.stringify(input.sync_state) : null,
       lastSyncedAt: nextStatus === "CONNECTED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     },
@@ -311,8 +373,6 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
       authType: input.auth_type.trim(),
       status: nextStatus,
       externalAccountId: input.external_account_id?.trim() || null,
-      metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
-      syncStateJson: input.sync_state ? JSON.stringify(input.sync_state) : null,
       lastSyncedAt: nextStatus === "CONNECTED" ? new Date() : null,
       lastError: input.last_error?.trim() || null
     }
@@ -362,9 +422,24 @@ export const requestArtifactRevision = async (approvalId: string, input: {
     where: { id: approvalId },
     include: { artifact: true }
   });
-  if (!approval) {
+  if (!approval || approval.status !== "PENDING") {
     return null;
   }
+
+  await prisma.approval.update({
+    where: { id: approvalId },
+    data: {
+      status: "REJECTED",
+      decisionNote: input.instruction.trim(),
+      decidedBy: input.requested_by?.trim() || DEFAULT_REVISION_REQUESTED_BY,
+      decidedAt: new Date(),
+      artifact: {
+        update: {
+          status: "REJECTED"
+        }
+      }
+    }
+  });
 
   const linkedTask = await prisma.task.findFirst({ where: { artifactId: approval.artifactId } });
   const revision = await prisma.artifactRevision.create({
@@ -383,6 +458,7 @@ export const requestArtifactRevision = async (approvalId: string, input: {
     await upsertTaskRecord(linkedTask.projectId, nextTask);
     await createTaskComment(linkedTask.projectId, linkedTask.id, input.instruction.trim(), input.requested_by?.trim() || DEFAULT_REVISION_REQUESTED_BY);
   }
+  await recordFounderFeedback(approval.projectId, input.instruction.trim(), "revision_request");
 
   await prisma.agentRun.create({
     data: {
@@ -413,7 +489,18 @@ export const submitArtifactRevision = async (revisionId: string, input: {
       artifact: true
     }
   });
-  if (!revision) {
+  if (!revision || revision.status !== "REQUESTED" || revision.approvalId) {
+    return null;
+  }
+
+  const openApproval = await prisma.approval.findFirst({
+    where: {
+      artifactId: revision.artifactId,
+      status: "PENDING"
+    },
+    select: { id: true }
+  });
+  if (openApproval) {
     return null;
   }
 

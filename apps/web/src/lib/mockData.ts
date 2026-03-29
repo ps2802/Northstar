@@ -1,3 +1,4 @@
+import { defaultAgentToolWrappers } from './agentStack';
 import type { AppState, BuildPhase, Task } from './types';
 
 const now = new Date();
@@ -81,11 +82,11 @@ export const demoState: AppState = {
     priorityWork: 'Build the GTM plan first, then create the first SEO and content tasks.',
     competitors: 'Growth.design, Animalz, and boutique conversion agencies',
     bottleneck: 'conversion',
-    authMethod: 'google',
+    authMethod: 'email',
     email: 'founder@acme-studio.com',
   },
   founderSession: {
-    authMethod: 'google',
+    authMethod: 'email',
     email: 'founder@acme-studio.com',
     status: 'connected',
     displayName: 'founder@acme-studio.com',
@@ -751,6 +752,29 @@ export const demoState: AppState = {
       credentialLabel: 'Telegram token',
     },
   ],
+  agentToolWrappers: defaultAgentToolWrappers(),
+  workspaceLearning: {
+    preferences: [
+      'Prefer concise founder-ready language over generic marketing filler',
+      'Keep blog briefs tied to clear business outcomes and realistic channels',
+      'Ask for approval before treating a draft as finished'
+    ],
+    recentFeedback: [
+      {
+        id: 'learn_1',
+        source: 'approval_rejection',
+        note: 'Make the draft tighter and more founder-native instead of sounding like a content agency.',
+        capturedAt: minutesAgo(42),
+      },
+      {
+        id: 'learn_2',
+        source: 'comment',
+        note: 'Prioritize work that improves the board story before adding more surfaces.',
+        capturedAt: minutesAgo(78),
+      },
+    ],
+    lastRefinedAt: minutesAgo(42),
+  },
   crmContacts: [
     {
       id: 'crm_1',

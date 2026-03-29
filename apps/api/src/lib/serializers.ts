@@ -11,6 +11,61 @@ const parseJson = <T>(value: string | null | undefined, fallback: T): T => {
 
 const toIso = (value: Date) => value.toISOString();
 
+const maskDisplayValue = (value: string | null | undefined) => {
+  if (!value) {
+    return value ?? null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.includes("@")) {
+    const [localPart, domainPart] = normalized.split("@", 2);
+    return `${localPart.slice(0, 2)}***@${domainPart}`;
+  }
+
+  if (normalized.length <= 8) {
+    return `${normalized.slice(0, 2)}***`;
+  }
+
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
+};
+
+const summarizeStoredPayload = (value: string | null | undefined): Record<string, unknown> | null => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return {
+        has_stored_data: parsed.length > 0,
+        entry_count: parsed.length
+      };
+    }
+
+    if (parsed && typeof parsed === "object") {
+      return {
+        has_stored_data: Object.keys(parsed as Record<string, unknown>).length > 0,
+        stored_fields: Object.keys(parsed as Record<string, unknown>).sort()
+      };
+    }
+
+    return {
+      has_stored_data: true,
+      value_type: typeof parsed
+    };
+  } catch {
+    return {
+      has_stored_data: true,
+      value_type: "invalid_json"
+    };
+  }
+};
+
 export const serializeWorkspace = (workspace: PrismaWorkspace): Workspace => ({
   id: workspace.id,
   name: workspace.name,
@@ -147,7 +202,7 @@ export const serializeExecutionProviderConfig = (config: PrismaExecutionProvider
   base_url: config.baseUrl,
   default_model: config.defaultModel,
   scopes: parseJson(config.scopesJson, []),
-  config: parseJson(config.configJson, null),
+  config: summarizeStoredPayload(config.configJson),
   last_validated_at: config.lastValidatedAt ? toIso(config.lastValidatedAt) : null,
   last_error: config.lastError,
   created_at: toIso(config.createdAt),
@@ -162,9 +217,9 @@ export const serializeIntegrationConnection = (connection: PrismaIntegrationConn
   label: connection.label,
   auth_type: connection.authType,
   status: connection.status,
-  external_account_id: connection.externalAccountId,
-  metadata: parseJson(connection.metadataJson, null),
-  sync_state: parseJson(connection.syncStateJson, null),
+  external_account_id: maskDisplayValue(connection.externalAccountId),
+  metadata: summarizeStoredPayload(connection.metadataJson),
+  sync_state: summarizeStoredPayload(connection.syncStateJson),
   last_synced_at: connection.lastSyncedAt ? toIso(connection.lastSyncedAt) : null,
   last_error: connection.lastError,
   created_at: toIso(connection.createdAt),

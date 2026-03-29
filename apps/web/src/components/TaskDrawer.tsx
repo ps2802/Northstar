@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Approval, Artifact, Comment, ExecutionPreference, ExecutionProvider, FounderIntake, Integration, Task } from '../lib/types';
+import type { Approval, Artifact, Comment, FounderIntake, Integration, Task, WorkspaceTruth } from '../lib/types';
 import { formatDateTime, formatScore, parseRationale } from '../lib/format';
 import { executableTaskTypes } from '../lib/taskConfig';
 import { ArtifactViewer } from './ArtifactViewer';
@@ -13,51 +13,66 @@ interface TaskDrawerProps {
   commentLoading?: boolean;
   comments: Comment[];
   decisionError?: string | null;
-  executionPreference: ExecutionPreference | null;
-  executionProviders: ExecutionProvider[];
+  disabledReason?: string | null;
   executeLoading?: boolean;
-  activeProviderId: string;
   founderIntake?: FounderIntake | null;
   integrations: Integration[];
+  mutationsAllowed?: boolean;
   onAddComment: (taskId: string, body: string) => Promise<boolean>;
   onApprove: (taskId: string) => Promise<boolean>;
   onClose: () => void;
-  onExecutionPreferenceChange: (next: Partial<ExecutionPreference>) => void;
   onExecute: (taskId: string) => Promise<boolean>;
   onOpenConnections: () => void;
   onReject: (taskId: string, note?: string) => Promise<boolean>;
   rejectLoading?: boolean;
   task: Task | null;
+  workspaceTruth: WorkspaceTruth;
 }
 
 const humanize = (value: string) => value.replaceAll('_', ' ');
 
-const getProviderOptions = (providers: ExecutionProvider[], activeProviderId: string) => {
-  return providers.map((provider) => ({
-    value: provider.id,
-    label: `${provider.name}${provider.id === activeProviderId ? ' (active)' : ''}${provider.status === 'needs_key' ? ' (add key first)' : ''}`,
-    connected: provider.status === 'connected' || provider.status === 'available',
-  }));
+const getConnectionNote = (task: Task, integrations: Integration[]) => {
+  const deliveryConnection = integrations.find((integration) => (
+    (task.channel === 'email' && integration.name === 'Gmail')
+    || (task.channel === 'x' && integration.name === 'X')
+    || (task.channel === 'instagram' && integration.name === 'Instagram')
+    || ((task.category === 'content' || task.category === 'website') && integration.name === 'Google Drive')
+    || (task.category === 'seo' && integration.name === 'Search Console')
+  ));
+
+  if (!deliveryConnection) {
+    return null;
+  }
+
+  if (deliveryConnection.status === 'connected') {
+    return `${deliveryConnection.name} access is saved but still unverified. Anything outside the board should be treated as manual until validation exists.`;
+  }
+
+  if (deliveryConnection.status === 'needs_key') {
+    return `${deliveryConnection.name} credentials are still missing. External delivery or sync stays blocked.`;
+  }
+
+  return `${deliveryConnection.name} is not set up yet. External delivery or sync stays blocked.`;
 };
 
-const getModeOptions = (task: Task) => {
-  if (task.channel === 'email' || task.channel === 'x' || task.channel === 'linkedin' || task.channel === 'instagram') {
-    return [
-      { value: 'founder_review', label: 'Founder review draft' },
-      { value: 'send_ready', label: 'Send-ready handoff' },
-    ] as const;
+const getWorkspaceReadOnlyCopy = (workspaceTruth: WorkspaceTruth, disabledReason?: string | null) => {
+  if (disabledReason) {
+    return disabledReason;
   }
 
-  if (task.category === 'website' || task.category === 'content') {
-    return [
-      { value: 'founder_review', label: 'Founder review draft' },
-      { value: 'implementation_handoff', label: 'Implementation handoff' },
-    ] as const;
+  if (workspaceTruth.source === 'cached') {
+    return 'This drawer is showing cached stale state. Live changes are disabled until a valid founder session is restored.';
   }
 
-  return [
-    { value: 'founder_review', label: 'Founder review draft' },
-  ] as const;
+  if (workspaceTruth.source === 'sample') {
+    return 'This drawer is showing sample state only. Live changes are disabled.';
+  }
+
+  if (workspaceTruth.understanding === 'fallback') {
+    return 'This workspace is still using fallback company understanding. Live changes are disabled until founder context is captured.';
+  }
+
+  return 'This workspace is not live yet. Live changes are disabled until a valid founder session exists.';
 };
 
 export function TaskDrawer({
@@ -69,21 +84,20 @@ export function TaskDrawer({
   commentLoading,
   comments,
   decisionError,
-  executionPreference,
-  executionProviders,
+  disabledReason,
   executeLoading,
-  activeProviderId,
   founderIntake,
   integrations,
+  mutationsAllowed = true,
   onAddComment,
   onApprove,
   onClose,
-  onExecutionPreferenceChange,
   onExecute,
   onOpenConnections,
   onReject,
   rejectLoading,
   task,
+  workspaceTruth,
 }: TaskDrawerProps) {
   const [commentBody, setCommentBody] = useState('');
   const [rejectionNote, setRejectionNote] = useState('');
@@ -100,47 +114,40 @@ export function TaskDrawer({
   const approvalPending = approval?.status === 'pending';
   const canExecute = executableTaskTypes.has(task.type) && (!artifact || artifact.status === 'rejected');
   const decisionBusy = Boolean(executeLoading || approveLoading || rejectLoading);
+  const decisionLocked = decisionBusy || !mutationsAllowed;
+  const commentLocked = Boolean(commentLoading) || !mutationsAllowed;
   const executionLabel = task.outputLabel ?? humanize(task.type);
   const channelLabel = task.channel ? humanize(task.channel) : 'internal';
-  const providerOptions = getProviderOptions(executionProviders, activeProviderId);
-  const selectedProvider = executionPreference?.provider ?? activeProviderId;
-  const selectedProviderStatus = providerOptions.find((option) => option.value === selectedProvider)?.connected ?? true;
-  const modeOptions = getModeOptions(task);
-  const selectedMode = executionPreference?.mode ?? 'founder_review';
-  const deliveryConnection = integrations.find((integration) => (
-    (task.channel === 'email' && integration.name === 'Gmail')
-    || (task.channel === 'x' && integration.name === 'X')
-    || (task.channel === 'instagram' && integration.name === 'Instagram')
-    || ((task.category === 'content' || task.category === 'website') && integration.name === 'Google Drive')
-    || (task.category === 'seo' && integration.name === 'Search Console')
-  ));
-  let decisionTitle = `${executionLabel} in progress`;
-  let decisionCopy = 'This task is part of the execution system, but it is not in a generated-asset state yet.';
+  const connectionNote = getConnectionNote(task, integrations);
+  const readOnlyCopy = getWorkspaceReadOnlyCopy(workspaceTruth, disabledReason);
+
+  let decisionTitle = 'Planning-only task';
+  let decisionCopy = 'This task can be prioritized and discussed here, but it does not generate a live draft in the current founder UI.';
 
   if (artifact) {
     if (approvalPending) {
-      decisionTitle = artifact.deliveryStage === 'ready_to_send'
-        ? `Ready to send on ${channelLabel}`
-        : `${executionLabel} ready for founder review`;
-      decisionCopy = artifact.deliveryStage === 'ready_to_send'
-        ? `Review exactly what Northstar plans to send through ${channelLabel}, then approve it or reject it with clear guidance.`
-        : `Review the ${channelLabel}-aware draft, then approve it or reject it with specific guidance so the next pass has useful founder feedback.`;
+      decisionTitle = `${executionLabel} waiting for founder review`;
+      decisionCopy = 'Review the draft, approve it, or request changes with explicit feedback.';
     } else if (artifact.status === 'rejected' && canExecute) {
       decisionTitle = `Revision requested for ${executionLabel}`;
-      decisionCopy = 'The founder rejected the last draft. Adjust the provider or handoff mode if needed, then generate a tighter revision.';
+      decisionCopy = mutationsAllowed
+        ? 'The previous draft was rejected. Generate a tighter revision when you are ready.'
+        : readOnlyCopy;
     } else if (artifact.status === 'approved') {
       decisionTitle = `${executionLabel} approved`;
-      decisionCopy = 'This output has already been approved and can remain attached to the completed task.';
+      decisionCopy = 'This draft has already been approved and remains attached to the completed task.';
     } else if (artifact.status === 'rejected') {
       decisionTitle = `${executionLabel} rejected`;
-      decisionCopy = 'This output was rejected. Keep the draft visible for reference and use the note or comments to guide the next revision.';
+      decisionCopy = 'The rejected draft stays visible here for reference until a later revision is requested.';
     } else {
-      decisionTitle = `${executionLabel} generated`;
-      decisionCopy = 'The output exists, but no pending approval is attached to it right now.';
+      decisionTitle = `${executionLabel} saved`;
+      decisionCopy = 'A draft exists for this task, but it is not currently waiting on a founder decision.';
     }
   } else if (canExecute) {
-    decisionTitle = `Generate ${executionLabel}`;
-    decisionCopy = 'Running this will generate a founder-reviewable draft, create an approval item, and move the task into founder review.';
+    decisionTitle = mutationsAllowed ? 'Generate blog brief draft' : 'Blog brief generation unavailable';
+    decisionCopy = mutationsAllowed
+      ? 'This is the only live generation path exposed in the founder UI. Running it creates a founder-review draft and approval item.'
+      : readOnlyCopy;
   }
 
   if (approvalView) {
@@ -172,6 +179,7 @@ export function TaskDrawer({
           </header>
 
           <div className="drawer-body approval-drawer-body">
+            {!mutationsAllowed ? <div className="drawer-truth-banner">{readOnlyCopy}</div> : null}
             <ArtifactViewer artifact={artifact ?? null} embedded />
 
             <section className="approval-detail-grid">
@@ -200,18 +208,18 @@ export function TaskDrawer({
                 <label className="approval-note-field">
                   Request changes note <span className="field-optional">Optional</span>
                   <textarea
-                    disabled={decisionBusy}
+                    disabled={decisionLocked}
                     rows={3}
                     value={rejectionNote}
                     onChange={(event) => setRejectionNote(event.target.value)}
-                    placeholder="Tell Northstar what needs to change before the next pass."
+                    placeholder="Explain what needs to change before the next pass."
                   />
                 </label>
                 <div className="approval-detail-actions">
                   <button
                     className="primary-button secondary"
                     type="button"
-                    disabled={decisionBusy}
+                    disabled={decisionLocked}
                     onClick={async () => {
                       await onApprove(task.id);
                     }}
@@ -221,7 +229,7 @@ export function TaskDrawer({
                   <button
                     className="ghost-button danger-button"
                     type="button"
-                    disabled={decisionBusy}
+                    disabled={decisionLocked}
                     onClick={async () => {
                       const rejected = await onReject(task.id, rejectionNote);
                       if (rejected) {
@@ -245,7 +253,7 @@ export function TaskDrawer({
       <aside className="drawer" onClick={(event) => event.stopPropagation()}>
         <header className="drawer-header">
           <div>
-            <p className="eyebrow">Northstar task view</p>
+            <p className="eyebrow">Task detail</p>
             <h2>{task.title}</h2>
           </div>
           <div className="drawer-header-actions">
@@ -259,7 +267,7 @@ export function TaskDrawer({
         <div className="drawer-body">
           <section className="decision-card">
             <div>
-              <p className="eyebrow">Decision surface</p>
+              <p className="eyebrow">Current truth</p>
               <h3>{decisionTitle}</h3>
               <p className="summary-copy">{decisionCopy}</p>
               {approval?.note ? <p className="summary-copy decision-note">Latest note: {approval.note}</p> : null}
@@ -268,55 +276,20 @@ export function TaskDrawer({
 
             <div className="decision-actions decision-actions-column">
               {artifact ? <span className={`status-chip ${artifact.status}`}>{humanize(artifact.status)}</span> : null}
-              <div className="decision-config">
-                <label>
-                  Provider
-                  <select
-                    disabled={decisionBusy}
-                    value={selectedProvider}
-                    onChange={(event) => onExecutionPreferenceChange({ provider: event.target.value })}
-                  >
-                    {providerOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Output mode
-                  <select
-                    disabled={decisionBusy}
-                    value={selectedMode}
-                    onChange={(event) => onExecutionPreferenceChange({ mode: event.target.value as ExecutionPreference['mode'] })}
-                  >
-                    {modeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              {!selectedProviderStatus ? (
-                <div className="decision-provider-warning">
-                  <p className="summary-copy">
-                    The selected execution provider is not connected yet. Add the provider key or switch back to the active provider before generating the next pass.
-                  </p>
-                  <button className="ghost-button" type="button" onClick={onOpenConnections}>
-                    Open connections
-                  </button>
+              {!canExecute ? <div className="drawer-truth-banner">Planning-only task. This type does not generate a live artifact in the current founder UI.</div> : null}
+              {!mutationsAllowed ? <div className="drawer-truth-banner">{readOnlyCopy}</div> : null}
+              {workspaceTruth.understanding !== 'verified' ? (
+                <div className="drawer-truth-banner">
+                  {workspaceTruth.understanding === 'fallback'
+                    ? 'Company understanding is still fallback-only. Treat generated copy and prioritization as provisional.'
+                    : 'Founder context is incomplete. Generated copy and prioritization may still miss important business constraints.'}
                 </div>
               ) : null}
-              {deliveryConnection && deliveryConnection.status !== 'connected' ? (
+              {connectionNote ? (
                 <div className="decision-provider-warning">
-                  <p className="summary-copy">
-                    {deliveryConnection.name} is still disconnected. Northstar can generate the draft now, but the real delivery path stays blocked until that workflow connection is set up.
-                  </p>
+                  <p className="summary-copy">{connectionNote}</p>
                   <button className="ghost-button" type="button" onClick={onOpenConnections}>
-                    Connect {deliveryConnection.name}
+                    Open connections
                   </button>
                 </div>
               ) : null}
@@ -324,12 +297,12 @@ export function TaskDrawer({
                 <button
                   className="primary-button secondary"
                   type="button"
-                  disabled={decisionBusy}
+                  disabled={decisionLocked}
                   onClick={async () => {
                     await onExecute(task.id);
                   }}
                 >
-                  {executeLoading ? 'Generating...' : artifact?.status === 'rejected' ? 'Generate revision' : `Generate ${executionLabel.toLowerCase()}`}
+                  {executeLoading ? 'Generating...' : artifact?.status === 'rejected' ? 'Generate revision' : 'Generate blog brief draft'}
                 </button>
               ) : null}
               {artifact && approvalPending ? (
@@ -337,17 +310,17 @@ export function TaskDrawer({
                   <label className="approval-note-field">
                     Rejection note <span className="field-optional">Optional</span>
                     <textarea
-                      disabled={decisionBusy}
+                      disabled={decisionLocked}
                       rows={3}
                       value={rejectionNote}
                       onChange={(event) => setRejectionNote(event.target.value)}
-                      placeholder="Tell Northstar what is missing or off before you reject this draft."
+                      placeholder="Explain what is missing or off before rejecting this draft."
                     />
                   </label>
                   <button
                     className="primary-button secondary"
                     type="button"
-                    disabled={decisionBusy}
+                    disabled={decisionLocked}
                     onClick={async () => {
                       await onApprove(task.id);
                     }}
@@ -357,7 +330,7 @@ export function TaskDrawer({
                   <button
                     className="ghost-button danger-button"
                     type="button"
-                    disabled={decisionBusy}
+                    disabled={decisionLocked}
                     onClick={async () => {
                       const rejected = await onReject(task.id, rejectionNote);
                       if (rejected) {
@@ -384,9 +357,9 @@ export function TaskDrawer({
             <div><span>Output</span><strong>{executionLabel}</strong></div>
             <div><span>Source</span><strong>{task.source}</strong></div>
             <div><span>Status</span><strong>{humanize(task.status)}</strong></div>
-            <div><span>Execution</span><strong>{humanize(task.executionStage ?? 'strategy')}</strong></div>
+            <div><span>Execution path</span><strong>{canExecute || artifact ? 'Live blog brief flow' : 'Planning only'}</strong></div>
             <div><span>Priority</span><strong>{formatScore(task.priority_score)}</strong></div>
-            <div><span>Operator</span><strong>{task.actor === 'northstar' ? 'Northstar' : 'Founder'}</strong></div>
+            <div><span>Handled by</span><strong>{task.actor === 'northstar' ? 'Workspace' : 'Founder'}</strong></div>
             <div><span>Needs founder</span><strong>{task.needsFounderAction ? 'Yes' : 'No'}</strong></div>
           </div>
 
@@ -406,7 +379,7 @@ export function TaskDrawer({
             </section>
             <section className="detail-card">
               <p className="eyebrow">Why this priority</p>
-              <p>{rationale.whyPriority || 'Priority comes from the current score and where this task sits in the board right now.'}</p>
+              <p>{rationale.whyPriority || 'Priority comes from the current score and where this task sits on the board right now.'}</p>
             </section>
             <section className="detail-card">
               <p className="eyebrow">Business outcome</p>
@@ -449,16 +422,17 @@ export function TaskDrawer({
           <section className="detail-card">
             <div className="detail-card-head">
               <div>
-                <p className="eyebrow">Founder comments</p>
+                <p className="eyebrow">Founder notes</p>
                 <h3>Persistent task context</h3>
               </div>
             </div>
+            {!mutationsAllowed ? <div className="drawer-truth-banner">Comments are read-only until the workspace is live again.</div> : null}
             <form
               className="comment-composer"
               onSubmit={async (event) => {
                 event.preventDefault();
                 const nextBody = commentBody.trim();
-                if (!nextBody) {
+                if (!nextBody || !mutationsAllowed) {
                   return;
                 }
 
@@ -469,16 +443,17 @@ export function TaskDrawer({
               }}
             >
               <textarea
-                disabled={commentLoading}
+                disabled={commentLocked}
                 rows={3}
                 value={commentBody}
                 onChange={(event) => setCommentBody(event.target.value)}
                 placeholder="Add founder context, approval feedback, or execution guidance."
               />
+              <p className="summary-copy">Founder notes here help Northstar sharpen future prioritization and the next revision pass.</p>
               <div className="comment-composer-actions">
                 {commentError ? <p className="inline-error">{commentError}</p> : null}
-                <button className="primary-button" type="submit" disabled={commentLoading || !commentBody.trim()}>
-                  {commentLoading ? 'Adding comment...' : 'Add comment'}
+                <button className="primary-button" type="submit" disabled={commentLocked || !commentBody.trim()}>
+                  {commentLoading ? 'Adding note...' : 'Add note'}
                 </button>
               </div>
             </form>
@@ -490,7 +465,7 @@ export function TaskDrawer({
                   <p>{comment.body}</p>
                   <span>{formatDateTime(comment.createdAt)}</span>
                 </article>
-              )) : <p>No comments yet.</p>}
+              )) : <p>No notes yet.</p>}
             </div>
           </section>
         </div>
