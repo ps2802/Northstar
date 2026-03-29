@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { MockFounderExecutor } from "@founder-os/agent-core";
+import { MockFounderExecutor, ProviderBackedBlogBriefExecutor } from "@founder-os/agent-core";
 import { ingestWebsite } from "@founder-os/site-ingestion";
 import { createTaskFromInput, evaluateTaskForExecution, generateSeedTasks, sortTasksByPriority, transitionTask } from "@founder-os/task-engine";
 import type { TaskInput, TaskStatus } from "@founder-os/types";
@@ -9,11 +9,18 @@ import { serializeArtifact, serializeDashboard, serializeFounderIntake, serializ
 import { createFallbackIngestion } from "./fallback.js";
 
 const executor = new MockFounderExecutor();
+const liveBlogBriefExecutor = new ProviderBackedBlogBriefExecutor();
 const DEFAULT_COMMENT_AUTHOR = "founder";
 const WORKSPACE_CONFIGURATION_RUN_TYPE = "workspace_configuration";
 const EXECUTABLE_TASK_STATUSES = new Set(["PLANNED", "IN_PROGRESS"]);
 const EXECUTABLE_TASK_TYPES = new Set(["BLOG_BRIEF"]);
 const MANUAL_LOCKED_TASK_STATUSES = new Set(["WAITING_FOR_APPROVAL", "DONE"]);
+
+const createExecutionError = (message: string, status = 409) => {
+  const error = new Error(message) as Error & { status?: number };
+  error.status = status;
+  return error;
+};
 
 type FounderIntakePayload = {
   website_url: string;
@@ -33,12 +40,13 @@ type ExecutionProviderConfig = {
   key: string;
   name: string;
   auth_type: "api_key" | "cli";
-  status: "connected" | "needs_key" | "available";
+  status: "connected" | "needs_key" | "available" | "error";
   description: string;
   model_hint: string;
   is_default: boolean;
   masked_secret?: string;
   connected_at?: string;
+  last_error?: string;
 };
 
 type IntegrationConfig = {
@@ -105,12 +113,21 @@ const defaultExecutionProviders = (): WorkspaceConfiguration["execution_provider
       is_default: true
     },
     {
+      key: "openrouter",
+      name: "OpenRouter",
+      auth_type: "api_key",
+      status: "needs_key",
+      description: "Generate assets through OpenRouter's OpenAI-compatible execution path.",
+      model_hint: "openai/gpt-4.1-mini",
+      is_default: false
+    },
+    {
       key: "openai",
       name: "OpenAI",
       auth_type: "api_key",
       status: "needs_key",
-      description: "Generate assets through an OpenAI-backed execution path.",
-      model_hint: "GPT-5 family",
+      description: "Generate assets through the direct OpenAI API.",
+      model_hint: "gpt-4.1-mini",
       is_default: false
     },
     {
@@ -366,6 +383,69 @@ const parseWorkspaceConfiguration = (value: string | null | undefined): Workspac
   }
 };
 
+const toUiProviderStatus = (status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR", authType: "api_key" | "cli") => {
+  if (authType === "cli") {
+    return "available" as const;
+  }
+
+  if (status === "CONFIGURED") {
+    return "connected" as const;
+  }
+
+  if (status === "ERROR") {
+    return "error" as const;
+  }
+
+  return "needs_key" as const;
+};
+
+const withPersistedProviderTruth = async (projectId: string, config: WorkspaceConfiguration | null): Promise<WorkspaceConfiguration | null> => {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { workspaceId: true }
+  });
+
+  if (!project) {
+    return config;
+  }
+
+  const providerRecords = await prisma.executionProviderConfig.findMany({
+    where: { workspaceId: project.workspaceId },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (!providerRecords.length) {
+    return config;
+  }
+
+  const baseline = config ?? buildWorkspaceConfiguration("https://northstar.local");
+  return {
+    ...baseline,
+    execution_provider: {
+      ...baseline.execution_provider,
+      providers: baseline.execution_provider.providers.map((provider) => {
+        const record = providerRecords.find((item) => item.providerKey === provider.key);
+        if (!record) {
+          return provider;
+        }
+
+        const storedConfig = record.configJson ? JSON.parse(record.configJson) as { api_key?: string } : {};
+        return {
+          ...provider,
+          name: record.label,
+          auth_type: record.authType as "api_key" | "cli",
+          status: toUiProviderStatus(record.status, record.authType as "api_key" | "cli"),
+          model_hint: record.defaultModel ?? provider.model_hint,
+          masked_secret: storedConfig.api_key ? maskSecret(storedConfig.api_key) : provider.masked_secret,
+          connected_at: record.lastValidatedAt?.toISOString() ?? provider.connected_at,
+          last_error: record.lastError ?? undefined,
+          is_default: provider.key === baseline.execution_provider.active_provider
+        };
+      })
+    }
+  };
+};
+
 const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceConfiguration | null> => {
   const latest = await prisma.agentRun.findFirst({
     where: {
@@ -375,7 +455,7 @@ const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceCo
     orderBy: { createdAt: "desc" }
   });
 
-  return parseWorkspaceConfiguration(latest?.outputJson);
+  return withPersistedProviderTruth(projectId, parseWorkspaceConfiguration(latest?.outputJson));
 };
 
 const createWorkspaceConfigurationRun = async (projectId: string, config: WorkspaceConfiguration, summary: string) => {
@@ -682,21 +762,6 @@ export const onboardProject = async (input: FounderIntakePayload | string) => {
     }
   });
 
-  await prisma.executionProviderConfig.create({
-    data: {
-      id: nanoid(),
-      workspaceId,
-      providerKey: "northstar_cli",
-      label: "Northstar CLI",
-      authType: "cli",
-      status: "CONFIGURED",
-      defaultModel: "Current local or CLI model",
-      scopesJson: JSON.stringify([]),
-      configJson: JSON.stringify({ seeded_onboarding: true }),
-      lastValidatedAt: new Date()
-    }
-  });
-
   const founderIntake = founderPlanningContext || founderIntakeInput.founder_email || founderIntakeInput.business_description
     ? await prisma.founderIntake.create({
         data: {
@@ -719,43 +784,6 @@ export const onboardProject = async (input: FounderIntakePayload | string) => {
   );
   for (const task of seedTasks) {
     await upsertTaskRecord(projectId, task);
-  }
-
-  const blogBriefTask = seedTasks.find((task) => task.type === "BLOG_BRIEF");
-  if (blogBriefTask) {
-    const execution = executor.run(
-      blogBriefTask,
-      buildExecutionCompanySummary(enrichedSummary, founderPlanningContext),
-      enrichedIcp
-    );
-    const artifact = execution.artifact?.type === "BLOG_BRIEF" ? execution.artifact : null;
-    if (artifact) {
-      await prisma.artifact.create({
-        data: {
-          id: artifact.id,
-          projectId,
-          type: artifact.type,
-          title: artifact.title,
-          content: artifact.content,
-          status: artifact.status
-        }
-      });
-
-      await prisma.approval.create({
-        data: {
-          id: nanoid(),
-          projectId,
-          artifactId: artifact.id,
-          status: "PENDING",
-          requestedBy: "founder-agent"
-        }
-      });
-    }
-
-    await upsertTaskRecord(
-      projectId,
-      founderIntake ? applyFounderContextToTask(execution.nextTask, serializeFounderIntake(founderIntake)) : execution.nextTask
-    );
   }
 
   await createWorkspaceConfigurationRun(
@@ -924,19 +952,23 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
     where: { workspaceId: project.workspaceId },
     orderBy: { updatedAt: "desc" }
   });
-  const preferredConfiguredProvider = configuration?.execution_provider.active_provider
-    ? persistedProviders.find((provider) => provider.providerKey === configuration.execution_provider.active_provider && provider.status === "CONFIGURED")
-    : null;
-  const fallbackConfiguredProvider = persistedProviders.find((provider) => provider.status === "CONFIGURED") ?? null;
-  const providerRecord = preferredConfiguredProvider ?? fallbackConfiguredProvider;
+  const activeProviderKey = configuration?.execution_provider.active_provider ?? "northstar_cli";
+  const providerRecord = persistedProviders.find((provider) => provider.providerKey === activeProviderKey && provider.status === "CONFIGURED") ?? null;
   if (!providerRecord) {
-    return null;
+    throw createExecutionError("No real execution provider is configured for this workspace. Save a provider key before running a blog brief.", 409);
+  }
+  if (!["openai", "openrouter"].includes(providerRecord.providerKey)) {
+    throw createExecutionError(`${providerRecord.label} is not supported for live blog brief execution yet. Use OpenRouter or OpenAI.`, 409);
+  }
+  const providerConfig = providerRecord.configJson ? JSON.parse(providerRecord.configJson) as { api_key?: string } : {};
+  if (!providerConfig.api_key?.trim()) {
+    throw createExecutionError(`${providerRecord.label} is selected, but no API key is stored for this workspace.`, 409);
   }
 
   const activeProvider = {
     key: providerRecord.providerKey,
     name: providerRecord.label,
-    is_default: providerRecord.providerKey === (configuration?.execution_provider.active_provider ?? providerRecord.providerKey)
+    is_default: providerRecord.providerKey === activeProviderKey
   };
   const executionJob = await prisma.executionJob.create({
     data: {
@@ -945,6 +977,7 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       taskId,
       runType: "task_execution",
       queueName: "default",
+      providerConfigId: providerRecord.id,
       status: "QUEUED",
       inputJson: JSON.stringify({
         task_id: taskId,
@@ -976,20 +1009,40 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
     })
     : null;
 
-  const execution = executor.run(
-    serializeTask(taskRecord),
-    buildExecutionCompanySummary(
-      project.companyProfile.companySummary,
-      [
-        project.founderIntake?.planningContext,
-        `Execution provider: ${activeProvider.name}`,
-        latestRejectedApproval?.decisionNote ?? latestFounderComment?.body
-          ? `Revision note: ${latestRejectedApproval?.decisionNote ?? latestFounderComment?.body}`
-          : null
-      ].filter((value): value is string => Boolean(value)).join("\n")
-    ),
-    project.companyProfile.guessedICP
-  );
+  let execution;
+  try {
+    execution = await liveBlogBriefExecutor.run(
+      serializeTask(taskRecord),
+      buildExecutionCompanySummary(
+        project.companyProfile.companySummary,
+        [
+          project.founderIntake?.planningContext,
+          latestRejectedApproval?.decisionNote ?? latestFounderComment?.body
+            ? `Revision note: ${latestRejectedApproval?.decisionNote ?? latestFounderComment?.body}`
+            : null
+        ].filter((value): value is string => Boolean(value)).join("\n")
+      ),
+      project.companyProfile.guessedICP,
+      {
+        providerKey: providerRecord.providerKey === "openrouter" ? "openrouter" : "openai",
+        providerLabel: activeProvider.name,
+        apiKey: providerConfig.api_key.trim(),
+        model: providerRecord.defaultModel ?? (providerRecord.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
+        baseUrl: providerRecord.baseUrl ?? (providerRecord.providerKey === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1"),
+        revisionNote: latestRejectedApproval?.decisionNote ?? latestFounderComment?.body ?? undefined,
+      }
+    );
+  } catch (error) {
+    await prisma.executionJob.update({
+      where: { id: executionJob.id },
+      data: {
+        status: "FAILED",
+        errorMessage: error instanceof Error ? error.message : "Execution failed",
+        completedAt: new Date()
+      }
+    });
+    throw createExecutionError(error instanceof Error ? error.message : "Execution failed", 502);
+  }
   const artifact = execution.artifact?.type === "BLOG_BRIEF" ? execution.artifact : null;
   let approvalId: string | null = null;
 

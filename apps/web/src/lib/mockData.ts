@@ -601,12 +601,21 @@ export const demoState: AppState = {
       isDefault: true,
     },
     {
+      id: 'openrouter',
+      name: 'OpenRouter',
+      authType: 'api_key',
+      status: 'needs_key',
+      description: 'Generate assets through OpenRouter\'s OpenAI-compatible execution path.',
+      modelHint: 'openai/gpt-4.1-mini',
+      isDefault: false,
+    },
+    {
       id: 'openai',
       name: 'OpenAI',
       authType: 'api_key',
       status: 'needs_key',
-      description: 'Generate assets through an OpenAI-backed execution path.',
-      modelHint: 'GPT-5 family',
+      description: 'Generate assets through the direct OpenAI API.',
+      modelHint: 'gpt-4.1-mini',
       isDefault: false,
     },
     {

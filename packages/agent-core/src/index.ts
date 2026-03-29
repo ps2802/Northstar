@@ -17,6 +17,15 @@ export interface ExecutorContract {
   ): { nextTask: Task; artifact?: Artifact };
 }
 
+export interface ProviderBackedExecutionOptions {
+  providerKey: "openai" | "openrouter";
+  providerLabel: string;
+  revisionNote?: string;
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+}
+
 export class FounderPlanner implements PlannerContract {
   evaluate(task: Task) {
     return evaluateTaskForExecution(task);
@@ -123,6 +132,168 @@ const buildBlogBrief = (task: Task, companySummary: string, guessedIcp: string, 
 
   return buildGenericBrief(task, companySummary, guessedIcp, revisionNote);
 };
+
+const createBlogBriefPrompt = (task: Task, companySummary: string, guessedIcp: string, revisionNote?: string) => [
+  "Write a founder-usable blog brief in markdown.",
+  "The brief should be concrete, opinionated, and ready for founder review.",
+  "Avoid generic content-marketing filler and avoid saying you are an AI.",
+  "",
+  "Use this planning scaffold:",
+  buildBlogBrief(task, companySummary, guessedIcp, revisionNote),
+].join("\n");
+
+const readOpenAIText = (payload: unknown): string | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as {
+    output_text?: string;
+    choices?: Array<{
+      message?: {
+        content?: string | Array<{ type?: string; text?: string }>;
+      };
+    }>;
+  };
+
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
+    return record.output_text.trim();
+  }
+
+  const firstChoice = record.choices?.[0]?.message?.content;
+  if (typeof firstChoice === "string" && firstChoice.trim()) {
+    return firstChoice.trim();
+  }
+
+  if (Array.isArray(firstChoice)) {
+    const text = firstChoice
+      .map((entry) => entry?.text?.trim())
+      .filter(Boolean)
+      .join("\n\n")
+      .trim();
+    return text || null;
+  }
+
+  return null;
+};
+
+const normalizeChatCompletionsUrl = (baseUrl?: string) => {
+  const normalizedBaseUrl = (baseUrl ?? "https://api.openai.com").replace(/\/+$/, "");
+  if (normalizedBaseUrl.endsWith("/chat/completions")) {
+    return normalizedBaseUrl;
+  }
+
+  if (normalizedBaseUrl.endsWith("/v1") || normalizedBaseUrl.endsWith("/api/v1")) {
+    return `${normalizedBaseUrl}/chat/completions`;
+  }
+
+  return `${normalizedBaseUrl}/v1/chat/completions`;
+};
+
+export interface OpenAiCompatibleTextOptions {
+  providerKey: "openai" | "openrouter";
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+const buildProviderHeaders = (options: OpenAiCompatibleTextOptions, requestUrl: string) => {
+  const isOpenRouter = options.providerKey === "openrouter" || requestUrl.includes("openrouter.ai");
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${options.apiKey}`,
+    ...(isOpenRouter
+      ? {
+          "HTTP-Referer": process.env.NORTHSTAR_APP_URL ?? "https://northstar.local",
+          "X-OpenRouter-Title": "Northstar",
+        }
+      : {}),
+  };
+};
+
+export const requestOpenAiCompatibleText = async (options: OpenAiCompatibleTextOptions): Promise<string> => {
+  const requestUrl = normalizeChatCompletionsUrl(options.baseUrl);
+  const response = await fetch(requestUrl, {
+    method: "POST",
+    headers: buildProviderHeaders(options, requestUrl),
+    body: JSON.stringify({
+      model: options.model,
+      temperature: options.temperature ?? 0.4,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      messages: [
+        {
+          role: "system",
+          content: options.systemPrompt
+        },
+        {
+          role: "user",
+          content: options.userPrompt
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${options.providerKey} generation failed: ${response.status} ${errorText}`.slice(0, 600));
+  }
+
+  const payload = await response.json();
+  const content = readOpenAIText(payload);
+  if (!content) {
+    throw new Error(`${options.providerKey} generation returned no usable content.`);
+  }
+
+  return content;
+};
+
+export class ProviderBackedBlogBriefExecutor {
+  async run(task: Task, companySummary: string, guessedIcp: string, options: ProviderBackedExecutionOptions): Promise<{ nextTask: Task; artifact?: Artifact }> {
+    if (task.type !== "BLOG_BRIEF") {
+      return {
+        nextTask: transitionTask(task, "BLOCKED", "Provider-backed execution only supports blog briefs in this workspace.")
+      };
+    }
+
+    const content = await requestOpenAiCompatibleText({
+      providerKey: options.providerKey,
+      apiKey: options.apiKey,
+      model: options.model ?? (options.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
+      baseUrl: options.baseUrl,
+      systemPrompt: "You write sharp founder-facing blog briefs. Return only the final markdown brief.",
+      userPrompt: createBlogBriefPrompt(task, companySummary, guessedIcp, options.revisionNote),
+      temperature: 0.4
+    });
+
+    const artifact: Artifact = {
+      id: `${task.id}-artifact`,
+      project_id: task.project_id,
+      type: "BLOG_BRIEF",
+      title: `${task.title} - Brief`,
+      content: [
+        `> Generated via ${options.providerLabel}`,
+        "",
+        content,
+      ].join("\n"),
+      status: "WAITING_FOR_APPROVAL",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    return {
+      nextTask: {
+        ...transitionTask(task, "WAITING_FOR_APPROVAL", `Generated blog brief through ${options.providerLabel} and routed it into the approval queue.`),
+        artifact_id: artifact.id
+      },
+      artifact
+    };
+  }
+}
 
 const buildSocialPostSet = (task: Task, companySummary: string, guessedIcp: string): string => {
   const channel = task.type === "LINKEDIN_POST_SET" ? "LinkedIn" : "X";

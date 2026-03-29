@@ -29,16 +29,22 @@ Historical rebuild waves are complete enough for demo use. The current phase is 
 - added persisted wrapper preferences for the agent stack capability categories without pretending those vendors are already wired live
 - made founder comments, rejection notes, and revision requests update founder planning context so Northstar adapts to user feedback over time
 
+## Batch 2 P1 shipped
+
+- replaced mocked `blog_brief` generation with a real provider-backed path
+- added OpenRouter as the current default OpenAI-compatible provider option for live execution
+- validate supported execution-provider credentials when the founder saves them
+- reflect validated provider truth back into the Connections, Settings, and board-adjacent trust surfaces
+- verified one live OpenRouter `blog_brief` execution end to end: task to artifact to pending approval
+
 ## External pilot blockers still open
 
-- `blog_brief` still runs through `MockFounderExecutor`
-- provider and integration validation is still not real downstream verification
+- most integrations still do not validate or deliver real downstream work
 - execution jobs still need stronger failure recovery than the current inline flow
 - stronger verified identity flows like OAuth or magic-link email auth are still not present
 
 ## Batch 2, explicitly later
 
-- real provider-backed execution behind the single supported live path
 - stronger execution-job recovery and retry boundaries
 - live CRM or research persistence
 - broader execution types, analytics depth, or campaign expansion

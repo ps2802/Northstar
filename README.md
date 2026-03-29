@@ -10,9 +10,9 @@ A founder connects a website, adds business context, answers follow-up questions
 - The board is the main product surface. Founder review stays in the loop before anything moves forward.
 - `blog_brief` is the only live generation path exposed in the founder product. Other task types are planning-only in this build.
 - Founder access now uses server-issued workspace sessions tied to founder email plus workspace website, not a local founder-session toggle.
-- Connection state is stored as saved workspace state, not as validated downstream truth.
+- Execution-provider state is validated on save for the supported OpenRouter/OpenAI-compatible path. Most non-provider integrations still remain saved workspace state, not validated downstream truth.
 - Sample, cached stale, fallback understanding, and incomplete context states are explicitly marked in the UI.
-- All non-health product routes require a founder session header. Public bootstrap is limited to onboarding and founder access restoration.
+- All non-health product routes require a founder session header. Public bootstrap is limited to onboarding.
 
 Audit references:
 
@@ -29,16 +29,16 @@ Audit references:
 - board, approvals, connections, analytics summary, and settings surfaces
 - manual task creation, task comments, and movement history
 - live draft generation for `blog_brief`
+- provider-backed `blog_brief` generation through a validated OpenRouter/OpenAI-compatible path
 - approval and rejection flow with revision notes and reruns
 - founder comments, rejection notes, and revision requests now feed back into Northstar's planning context so future prioritization and revisions adapt
 - onboarding can restore an existing workspace session before creating a duplicate workspace
-- provider setup, integration setup, and persisted workspace configuration with masked display fields
+- provider setup, provider validation, integration setup, and persisted workspace configuration with masked display fields
 - agent-stack wrapper selection for identity, execution, browser, search, memory, payments, SaaS access, and voice
 - demo CRM and research panels
 
 ## What is still mocked or weak
 
-- execution still runs through `MockFounderExecutor`
 - every task type except `blog_brief` is planning-only
 - stronger verified identity flows like OAuth or magic-link email auth are still not present
 - many integrations persist saved access state but do not validate or deliver real downstream work
@@ -52,7 +52,7 @@ Audit references:
 - `packages/types`: shared domain models
 - `packages/site-ingestion`: site ingestion and summary logic
 - `packages/task-engine`: task generation, scoring, and board transitions
-- `packages/agent-core`: planner contracts and mocked v1 execution
+- `packages/agent-core`: planner contracts and provider-backed `blog_brief` execution
 - `prisma/schema.prisma`: Postgres schema for local and deployed environments
 
 ## Local setup

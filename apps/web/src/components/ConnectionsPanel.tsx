@@ -32,9 +32,10 @@ const integrationStatusLabel: Record<Integration['status'], string> = {
 };
 
 const providerStatusLabel: Record<ExecutionProvider['status'], string> = {
-  connected: 'Saved, unverified',
+  connected: 'Validated',
   needs_key: 'Key required',
   available: 'Local only',
+  error: 'Validation failed',
 };
 
 const getReadOnlyNotice = (workspaceTruth: WorkspaceTruth) => {
@@ -194,7 +195,7 @@ export function ConnectionsPanel({
         <div className="connection-section-head">
           <div>
             <p className="eyebrow">Execution providers</p>
-            <h3>Choose the provider this workspace should prefer later</h3>
+          <h3>Choose the validated provider this workspace should prefer</h3>
           </div>
           <span className="domain-badge">{savedProviderCount} saved</span>
         </div>
@@ -217,8 +218,9 @@ export function ConnectionsPanel({
                 <p className="connection-card-caption">{provider.modelHint}</p>
                 {provider.maskedSecret ? <p className="connection-card-caption">Saved credential: {provider.maskedSecret}</p> : null}
                 {provider.status === 'connected' ? (
-                  <p className="connection-card-caption">Provider access is saved only. Validation is not shown in this founder UI yet.</p>
+                  <p className="connection-card-caption">Last validated {provider.connectedAt ? new Date(provider.connectedAt).toLocaleString() : 'recently'}.</p>
                 ) : null}
+                {provider.status === 'error' && provider.lastError ? <p className="inline-error">{provider.lastError}</p> : null}
                 {providerErrorById[provider.id] ? <p className="inline-error">{providerErrorById[provider.id]}</p> : null}
 
                 {provider.authType === 'api_key' ? (
@@ -250,7 +252,7 @@ export function ConnectionsPanel({
                           }
                         }}
                       >
-                        {isConnecting ? 'Saving...' : provider.status === 'connected' ? 'Update saved key' : 'Save key'}
+                        {isConnecting ? 'Validating...' : provider.status === 'connected' ? 'Revalidate key' : 'Validate key'}
                       </button>
                     ) : null}
                     <button

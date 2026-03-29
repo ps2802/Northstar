@@ -24,14 +24,12 @@ Status date: March 28, 2026
 
 ## Active priorities
 
-- replace `MockFounderExecutor` behind `blog_brief` with a real provider-backed path
-- validate provider and integration credentials against real downstream systems
+- validate integration credentials against real downstream systems where that can be done honestly
 - harden execution-job failure handling and recovery
 - run deployed QA against the live session-protected stack
 
 ## Remaining or mocked
 
-- `blog_brief` execution still uses mocked generation logic
 - integrations mostly persist saved state without real delivery or validation depth
 - agent-stack wrapper choices are stored as preferred vendors only; they do not yet provision or validate those external systems
 - CRM contacts and research notes are still seeded/demo data in the web app
@@ -44,5 +42,5 @@ Status date: March 28, 2026
 - Northstar-on-Northstar after trust-copy changes
 - fresh load with no session should land on onboarding, not a load error
 - cached stale workspace should stay read-only with explicit banners
-- live `blog_brief` execution, approval, and rejection should still work end to end
+- live `blog_brief` execution, approval, and rejection should keep working end to end on the real provider path
 - session-scoped route access should reject cross-workspace requests

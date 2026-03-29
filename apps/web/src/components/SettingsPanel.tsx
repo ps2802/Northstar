@@ -1,4 +1,4 @@
-import { accountHealthClass, accountHealthLabel, getIntegrationHealth, getProviderHealth, summarizeHealth } from '../lib/accountHealth';
+import { accountHealthClass, accountHealthLabel, getIntegrationHealth, getProviderHealth, providerHealthLabel, summarizeHealth } from '../lib/accountHealth';
 import type { CompanyProfile, ExecutionProvider, FounderIntake, Integration, Project } from '../lib/types';
 
 interface SettingsPanelProps {
@@ -78,8 +78,8 @@ export function SettingsPanel({
           <article className="settings-detail-card">
             <span>Execution engines</span>
             <div className="settings-chip-row">
-              <span className="connection-status-connected">{providerSummary.connected} saved, unverified</span>
-              <span className="connection-status-needs_key">{providerSummary.needsReconnect} credential missing</span>
+              <span className="connection-status-connected">{providerSummary.connected} validated</span>
+              <span className="connection-status-needs_key">{providerSummary.needsReconnect} needs reconnect</span>
               <span className="connection-status-planned">{providerSummary.notConnected} not set up</span>
             </div>
           </article>
@@ -110,7 +110,7 @@ export function SettingsPanel({
               {executionProviders.map((provider) => (
                 <div key={provider.id} className="settings-status-row">
                   <strong>{provider.name}{activeProviderId === provider.id ? ' (active)' : ''}</strong>
-                  <span className={accountHealthClass[getProviderHealth(provider)]}>{accountHealthLabel[getProviderHealth(provider)]}</span>
+                  <span className={accountHealthClass[getProviderHealth(provider)]}>{providerHealthLabel[getProviderHealth(provider)]}</span>
                 </div>
               ))}
             </div>

@@ -69,6 +69,7 @@ const providerSchema = z.object({
   status: z.enum(["NOT_CONFIGURED", "CONFIGURED", "ERROR"]).optional(),
   base_url: z.string().trim().url().optional(),
   default_model: z.string().trim().min(1).optional(),
+  api_key: z.string().trim().min(1).optional(),
   scopes: z.array(z.string().trim().min(1)).optional(),
   last_error: z.string().trim().min(1).optional()
 });
@@ -113,12 +114,13 @@ const configurationSchema = z.object({
       key: z.string().trim().min(1),
       name: z.string().trim().min(1),
       auth_type: z.enum(["api_key", "cli"]),
-      status: z.enum(["connected", "needs_key", "available"]),
+      status: z.enum(["connected", "needs_key", "available", "error"]),
       description: z.string().trim().min(1),
       model_hint: z.string().trim().min(1),
       is_default: z.boolean(),
       masked_secret: z.string().trim().optional(),
-      connected_at: z.string().trim().optional()
+      connected_at: z.string().trim().optional(),
+      last_error: z.string().trim().optional()
     })).min(1)
   }).optional(),
   integrations: z.array(z.object({
@@ -561,11 +563,17 @@ export const registerRoutes = async (app: FastifyInstance) => {
       return reply.status(409).send({ error: "Task already has an execution artifact; use the approval or revision flow instead" });
     }
 
-    const dashboard = await runTaskExecution(projectId, taskId);
-    if (!dashboard) {
-      return reply.status(409).send({ error: "Task execution is not allowed in the current state" });
+    try {
+      const dashboard = await runTaskExecution(projectId, taskId);
+      if (!dashboard) {
+        return reply.status(409).send({ error: "Task execution is not allowed in the current state" });
+      }
+      return { dashboard };
+    } catch (error) {
+      const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: number }).status) : 502;
+      const message = error instanceof Error ? error.message : "Task execution failed";
+      return reply.status(Number.isFinite(status) ? status : 502).send({ error: message });
     }
-    return { dashboard };
   });
 
   app.post("/projects/:projectId/tasks/:taskId/status", async (request, reply) => {

@@ -607,8 +607,9 @@ export function CommandCenter() {
   }), [state.integrations]);
 
   const providerSummary = useMemo(() => ({
-    saved_unverified: state.executionProviders.filter((provider) => provider.status === 'connected').length,
+    connected: state.executionProviders.filter((provider) => provider.status === 'connected').length,
     needs_key: state.executionProviders.filter((provider) => provider.status === 'needs_key').length,
+    error: state.executionProviders.filter((provider) => provider.status === 'error').length,
     local_only: state.executionProviders.filter((provider) => provider.status === 'available').length,
   }), [state.executionProviders]);
   const agentStackSummary = useMemo(() => ({
@@ -1306,8 +1307,9 @@ export function CommandCenter() {
               <article className="settings-detail-card">
                 <span>Execution providers</span>
                 <div className="settings-chip-row">
-                  <span className="connection-status-connected">{providerSummary.saved_unverified} saved, unverified</span>
+                  <span className="connection-status-connected">{providerSummary.connected} validated</span>
                   <span className="connection-status-needs_key">{providerSummary.needs_key} key required</span>
+                  <span className="connection-status-needs_key">{providerSummary.error} validation failed</span>
                   <span className="connection-status-planned">{providerSummary.local_only} local only</span>
                 </div>
               </article>
@@ -1360,9 +1362,11 @@ export function CommandCenter() {
                       <strong>{provider.name}{state.activeProviderId === provider.id ? ' (preferred)' : ''}</strong>
                       <span>
                         {provider.status === 'connected'
-                          ? 'Saved, unverified'
+                          ? 'Validated'
                           : provider.status === 'needs_key'
                             ? 'Key required'
+                            : provider.status === 'error'
+                              ? 'Validation failed'
                             : 'Local only'}
                       </span>
                     </div>
