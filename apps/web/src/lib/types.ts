@@ -358,13 +358,14 @@ export interface Integration {
   name: string;
   category: IntegrationCategory;
   authType: 'api_key' | 'oauth';
-  status: 'connected' | 'needs_key' | 'planned';
+  status: 'connected' | 'pending' | 'needs_key' | 'planned' | 'error';
   description: string;
   credentialLabel: string;
   connectedAs?: string;
   maskedSecret?: string;
   connectedAt?: string;
   lastSyncAt?: string;
+  lastError?: string;
 }
 
 export interface CRMContact {

@@ -1,6 +1,6 @@
 # Northstar Task Board
 
-Status date: March 28, 2026
+Status date: April 2, 2026
 
 ## Current truth
 
@@ -21,16 +21,18 @@ Status date: March 28, 2026
 - backend serialization now returns masked display fields instead of raw provider or connection payloads
 - Connections now includes persisted agent-stack wrapper preferences instead of keeping external tool choices out of product truth
 - founder feedback now updates stored planning context so future prioritization and revision guidance improve from comments and change requests
+- supported API-key integrations now validate into explicit `connected`, `pending`, `error`, or `not set up` states instead of relying on local UI assumptions
+- protected-stack Playwright coverage now checks authenticated shell rendering and live `blog_brief` execution
 
 ## Active priorities
 
-- validate integration credentials against real downstream systems where that can be done honestly
 - harden execution-job failure handling and recovery
-- run deployed QA against the live session-protected stack
+- run one clean deployed QA pass against the latest live session-protected stack
+- expand honest integration validation only where real downstream checks exist
 
 ## Remaining or mocked
 
-- integrations mostly persist saved state without real delivery or validation depth
+- many integrations still lack real downstream delivery or validation depth beyond the currently supported checks
 - agent-stack wrapper choices are stored as preferred vendors only; they do not yet provision or validate those external systems
 - CRM contacts and research notes are still seeded/demo data in the web app
 - no worker/retry daemon yet for queued execution jobs

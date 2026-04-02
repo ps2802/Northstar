@@ -70,8 +70,8 @@ export function SettingsPanel({
           <article className="settings-detail-card">
             <span>Workflow accounts</span>
             <div className="settings-chip-row">
-              <span className="connection-status-connected">{integrationSummary.connected} saved, unverified</span>
-              <span className="connection-status-needs_key">{integrationSummary.needsReconnect} credential missing</span>
+              <span className="connection-status-connected">{integrationSummary.connected} validated</span>
+              <span className="connection-status-needs_key">{integrationSummary.needsReconnect} needs attention</span>
               <span className="connection-status-planned">{integrationSummary.notConnected} not set up</span>
             </div>
           </article>

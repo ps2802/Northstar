@@ -26,9 +26,11 @@ interface ConnectionsPanelProps {
 }
 
 const integrationStatusLabel: Record<Integration['status'], string> = {
-  connected: 'Saved, unverified',
+  connected: 'Validated',
+  pending: 'Saved, pending validation',
   needs_key: 'Credential required',
   planned: 'Not set up',
+  error: 'Validation failed',
 };
 
 const providerStatusLabel: Record<ExecutionProvider['status'], string> = {
@@ -277,9 +279,9 @@ export function ConnectionsPanel({
         <div className="connection-section-head">
           <div>
             <p className="eyebrow">Workflow tools</p>
-            <h3>Saved access only until validation exists</h3>
+            <h3>Workspace integrations</h3>
           </div>
-          <span className="domain-badge">{savedIntegrationCount} saved</span>
+          <span className="domain-badge">{savedIntegrationCount} validated</span>
         </div>
 
         <div className="connection-grid">
@@ -289,10 +291,14 @@ export function ConnectionsPanel({
             const isSyncing = pendingSyncId === integration.id;
             const integrationSecret = integrationSecrets[integration.id] ?? '';
             const connectionLocked = mutationsLocked || isConnecting;
-            const disconnectLocked = mutationsLocked || integration.status !== 'connected' || isDisconnecting;
-            const validationUnavailable = integration.status === 'connected'
-              ? `Validation for ${integration.name} is not available in this founder UI yet.`
-              : `Save ${integration.name} first before validation can exist.`;
+            const disconnectLocked = mutationsLocked || !['connected', 'pending', 'error'].includes(integration.status) || isDisconnecting;
+            const validationCopy = integration.status === 'connected'
+              ? `Last validated ${integration.lastSyncAt ? new Date(integration.lastSyncAt).toLocaleString() : 'recently'}.`
+              : integration.status === 'pending'
+                ? `${integration.name} is saved, but still waiting on validation.`
+                : integration.status === 'error'
+                  ? integration.lastError ?? `${integration.name} failed validation.`
+                : `Save ${integration.name} first before validation can exist.`;
             const oauthCopy = integration.authType === 'oauth'
               ? `${integration.name} needs a real OAuth handoff. This founder UI cannot mark it connected directly.`
               : null;
@@ -308,7 +314,8 @@ export function ConnectionsPanel({
                   {integration.maskedSecret ? 'Credential saved locally.' : integration.credentialLabel}
                 </p>
                 {integration.maskedSecret ? <p className="connection-card-caption">Saved credential: {integration.maskedSecret}</p> : null}
-                {integration.status === 'connected' ? <p className="connection-card-caption">{validationUnavailable}</p> : null}
+                {integration.status === 'connected' || integration.status === 'pending' ? <p className="connection-card-caption">{validationCopy}</p> : null}
+                {integration.status === 'error' && integration.lastError ? <p className="inline-error">{integration.lastError}</p> : null}
                 {oauthCopy ? <p className="connection-card-caption">{oauthCopy}</p> : null}
                 {connectErrorById[integration.id] ? <p className="inline-error">{connectErrorById[integration.id]}</p> : null}
 
@@ -339,21 +346,23 @@ export function ConnectionsPanel({
                       {integration.authType === 'oauth'
                         ? 'OAuth required'
                         : isConnecting
-                          ? 'Saving...'
+                          ? 'Validating...'
                           : integration.status === 'connected'
-                            ? 'Update saved access'
-                            : 'Save access'}
+                            ? 'Revalidate access'
+                            : integration.status === 'pending'
+                              ? 'Validate access'
+                              : 'Validate access'}
                     </button>
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled
-                      title={validationUnavailable}
+                      disabled={mutationsLocked || isSyncing || integration.authType === 'oauth' || !['connected', 'pending', 'error'].includes(integration.status)}
+                      title={validationCopy}
                       onClick={async () => {
                         await onSync(integration.id);
                       }}
                     >
-                      {isSyncing ? 'Checking...' : 'Validation unavailable'}
+                      {isSyncing ? 'Checking...' : 'Validate again'}
                     </button>
                     <button
                       className="ghost-button danger-button"
@@ -363,7 +372,7 @@ export function ConnectionsPanel({
                         await onDisconnect(integration.id);
                       }}
                     >
-                      {isDisconnecting ? 'Removing...' : 'Remove saved access'}
+                      {isDisconnecting ? 'Removing...' : 'Disconnect'}
                     </button>
                   </div>
                 </div>

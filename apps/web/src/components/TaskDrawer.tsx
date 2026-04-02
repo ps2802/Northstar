@@ -45,7 +45,15 @@ const getConnectionNote = (task: Task, integrations: Integration[]) => {
   }
 
   if (deliveryConnection.status === 'connected') {
-    return `${deliveryConnection.name} access is saved but still unverified. Anything outside the board should be treated as manual until validation exists.`;
+    return `${deliveryConnection.name} has validated access. External delivery can be trusted only within the supported flow for that integration.`;
+  }
+
+  if (deliveryConnection.status === 'pending') {
+    return `${deliveryConnection.name} access is saved, but validation is still pending or unsupported. Anything outside the board should still be treated as manual.`;
+  }
+
+  if (deliveryConnection.status === 'error') {
+    return `${deliveryConnection.name} validation failed. External delivery or sync stays blocked until that connection is fixed.`;
   }
 
   if (deliveryConnection.status === 'needs_key') {

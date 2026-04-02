@@ -54,6 +54,193 @@ const getProviderDefaults = (providerKey: string) => {
   }
 };
 
+const getIntegrationDefaults = (providerKey: string) => {
+  switch (providerKey) {
+    case "intercom":
+      return {
+        authType: "api_key" as const,
+        label: "Intercom"
+      };
+    case "x":
+      return {
+        authType: "api_key" as const,
+        label: "X"
+      };
+    case "google_workspace":
+      return {
+        authType: "oauth" as const,
+        label: "Google Workspace"
+      };
+    case "gmail":
+      return {
+        authType: "oauth" as const,
+        label: "Gmail"
+      };
+    case "google_drive":
+      return {
+        authType: "oauth" as const,
+        label: "Google Drive"
+      };
+    case "instagram":
+      return {
+        authType: "oauth" as const,
+        label: "Instagram"
+      };
+    case "threads":
+      return {
+        authType: "oauth" as const,
+        label: "Threads"
+      };
+    case "image_generation":
+      return {
+        authType: "api_key" as const,
+        label: "Image generation"
+      };
+    default:
+      return {
+        authType: "api_key" as const,
+        label: providerKey
+      };
+  }
+};
+
+const readJsonResponse = async (response: Response) => {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { raw: text };
+  }
+};
+
+const validateIntercomConnection = async (apiKey: string) => {
+  const response = await fetch("https://api.intercom.io/me", {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "Intercom-Version": "2.11"
+    }
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`Intercom validation failed: ${response.status} ${JSON.stringify(payload)}`.slice(0, 400));
+  }
+
+  const maybeApp = payload && typeof payload.app === "object" && payload.app ? payload.app as Record<string, unknown> : null;
+  const maybeType = typeof payload?.type === "string" ? payload.type : "intercom";
+  return {
+    externalAccountId: typeof maybeApp?.name === "string"
+      ? maybeApp.name
+      : typeof maybeApp?.id === "string"
+        ? maybeApp.id
+        : maybeType,
+    syncState: {
+      validated_provider: "intercom",
+      validation_mode: "live_api"
+    }
+  };
+};
+
+const validateXConnection = async (apiKey: string) => {
+  const response = await fetch("https://api.x.com/2/users/by/username/XDevelopers", {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`
+    }
+  });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`X validation failed: ${response.status} ${JSON.stringify(payload)}`.slice(0, 400));
+  }
+
+  const maybeData = payload && typeof payload.data === "object" && payload.data ? payload.data as Record<string, unknown> : null;
+  return {
+    externalAccountId: typeof maybeData?.username === "string" ? maybeData.username : "validated_token",
+    syncState: {
+      validated_provider: "x",
+      validation_mode: "read_api"
+    }
+  };
+};
+
+const validateIntegrationConnection = async (input: {
+  providerKey: string;
+  authType: string;
+  apiKey?: string;
+  externalAccountId?: string;
+}) => {
+  const defaults = getIntegrationDefaults(input.providerKey);
+  const authType = input.authType.trim() || defaults.authType;
+
+  if (authType === "oauth") {
+    return {
+      status: "PENDING" as const,
+      externalAccountId: input.externalAccountId?.trim() || null,
+      lastError: `${defaults.label} requires a real OAuth handoff before it can be validated.`,
+      lastSyncedAt: null,
+      syncState: {
+        validation_mode: "oauth_required"
+      }
+    };
+  }
+
+  if (!input.apiKey?.trim()) {
+    return {
+      status: "DISCONNECTED" as const,
+      externalAccountId: null,
+      lastError: "API key required",
+      lastSyncedAt: null,
+      syncState: {
+        validation_mode: "missing_key"
+      }
+    };
+  }
+
+  try {
+    const result = input.providerKey === "intercom"
+      ? await validateIntercomConnection(input.apiKey.trim())
+      : input.providerKey === "x"
+        ? await validateXConnection(input.apiKey.trim())
+        : null;
+
+    if (!result) {
+      return {
+        status: "ERROR" as const,
+        externalAccountId: input.externalAccountId?.trim() || null,
+        lastError: `Live validation for ${defaults.label} is not implemented in this workspace yet.`,
+        lastSyncedAt: null,
+        syncState: {
+          validation_mode: "unsupported"
+        }
+      };
+    }
+
+    return {
+      status: "CONNECTED" as const,
+      externalAccountId: result.externalAccountId,
+      lastError: null,
+      lastSyncedAt: new Date(),
+      syncState: result.syncState
+    };
+  } catch (error) {
+    return {
+      status: "ERROR" as const,
+      externalAccountId: input.externalAccountId?.trim() || null,
+      lastError: error instanceof Error ? error.message : "Integration validation failed",
+      lastSyncedAt: null,
+      syncState: {
+        validation_mode: "live_api"
+      }
+    };
+  }
+};
+
 const validateProviderConnection = async (input: {
   providerKey: string;
   apiKey?: string;
@@ -88,7 +275,7 @@ const validateProviderConnection = async (input: {
       systemPrompt: "Return the word ok.",
       userPrompt: "Reply with ok.",
       temperature: 0,
-      maxTokens: 8
+      maxTokens: 16
     });
 
     return {
@@ -436,6 +623,7 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
   auth_type: string;
   status?: ConnectionStatus;
   external_account_id?: string;
+  api_key?: string;
   last_error?: string;
 }) => {
   const workspace = await ensureWorkspace(workspaceId);
@@ -450,7 +638,25 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
     }
   }
 
-  const nextStatus = input.status ?? "CONNECTED";
+  const defaults = getIntegrationDefaults(providerKey);
+  const existing = await prisma.integrationConnection.findUnique({
+    where: {
+      workspaceId_providerKey: {
+        workspaceId,
+        providerKey
+      }
+    }
+  });
+  const existingMetadata = existing?.metadataJson ? JSON.parse(existing.metadataJson) as Record<string, unknown> : {};
+  const nextMetadata = input.api_key?.trim()
+    ? { ...existingMetadata, api_key: input.api_key.trim() }
+    : existingMetadata;
+  const validation = await validateIntegrationConnection({
+    providerKey,
+    authType: input.auth_type.trim() || defaults.authType,
+    apiKey: typeof nextMetadata.api_key === "string" ? nextMetadata.api_key : undefined,
+    externalAccountId: input.external_account_id
+  });
 
   const connection = await prisma.integrationConnection.upsert({
     where: {
@@ -461,28 +667,60 @@ export const upsertIntegrationConnection = async (workspaceId: string, providerK
     },
     update: {
       projectId: input.project_id ?? null,
-      label: input.label?.trim() || providerKey,
-      authType: input.auth_type.trim(),
-      status: nextStatus,
-      externalAccountId: input.external_account_id?.trim() || null,
-      lastSyncedAt: nextStatus === "CONNECTED" ? new Date() : null,
-      lastError: input.last_error?.trim() || null
+      label: input.label?.trim() || defaults.label,
+      authType: input.auth_type.trim() || defaults.authType,
+      status: validation.status,
+      externalAccountId: validation.externalAccountId,
+      metadataJson: Object.keys(nextMetadata).length ? JSON.stringify(nextMetadata) : null,
+      syncStateJson: JSON.stringify(validation.syncState),
+      lastSyncedAt: validation.lastSyncedAt,
+      lastError: validation.lastError ?? input.last_error?.trim() ?? null
     },
     create: {
       id: nanoid(),
       workspaceId,
       projectId: input.project_id ?? null,
       providerKey,
-      label: input.label?.trim() || providerKey,
-      authType: input.auth_type.trim(),
-      status: nextStatus,
-      externalAccountId: input.external_account_id?.trim() || null,
-      lastSyncedAt: nextStatus === "CONNECTED" ? new Date() : null,
-      lastError: input.last_error?.trim() || null
+      label: input.label?.trim() || defaults.label,
+      authType: input.auth_type.trim() || defaults.authType,
+      status: validation.status,
+      externalAccountId: validation.externalAccountId,
+      metadataJson: Object.keys(nextMetadata).length ? JSON.stringify(nextMetadata) : null,
+      syncStateJson: JSON.stringify(validation.syncState),
+      lastSyncedAt: validation.lastSyncedAt,
+      lastError: validation.lastError ?? input.last_error?.trim() ?? null
     }
   });
 
   return serializeIntegrationConnection(connection);
+};
+
+export const revalidateIntegrationConnection = async (workspaceId: string, connectionId: string) => {
+  const connection = await prisma.integrationConnection.findUnique({ where: { id: connectionId } });
+  if (!connection || connection.workspaceId !== workspaceId) {
+    return null;
+  }
+
+  const metadata = connection.metadataJson ? JSON.parse(connection.metadataJson) as Record<string, unknown> : {};
+  const validation = await validateIntegrationConnection({
+    providerKey: connection.providerKey,
+    authType: connection.authType,
+    apiKey: typeof metadata.api_key === "string" ? metadata.api_key : undefined,
+    externalAccountId: connection.externalAccountId ?? undefined
+  });
+
+  const updated = await prisma.integrationConnection.update({
+    where: { id: connectionId },
+    data: {
+      status: validation.status,
+      externalAccountId: validation.externalAccountId,
+      syncStateJson: JSON.stringify(validation.syncState),
+      lastSyncedAt: validation.lastSyncedAt,
+      lastError: validation.lastError
+    }
+  });
+
+  return serializeIntegrationConnection(updated);
 };
 
 export const disconnectIntegrationConnection = async (workspaceId: string, connectionId: string) => {
@@ -495,7 +733,10 @@ export const disconnectIntegrationConnection = async (workspaceId: string, conne
     where: { id: connectionId },
     data: {
       status: "DISCONNECTED",
+      externalAccountId: null,
+      metadataJson: null,
       lastError: null,
+      lastSyncedAt: null,
       syncStateJson: JSON.stringify({ disconnected_at: new Date().toISOString() })
     }
   });

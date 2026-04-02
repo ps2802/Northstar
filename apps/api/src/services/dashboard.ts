@@ -22,6 +22,14 @@ const createExecutionError = (message: string, status = 409) => {
   return error;
 };
 
+const MAX_EXECUTION_ATTEMPTS = 2;
+const EXECUTION_RETRY_DELAY_MS = 1200;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableExecutionError = (message: string) =>
+  /429|5\d\d|rate limit|temporar|timed out|fetch failed|network|socket|ecconnreset|econnreset|enotfound|etimedout/i.test(message);
+
 type FounderIntakePayload = {
   website_url: string;
   business_description?: string;
@@ -54,13 +62,14 @@ type IntegrationConfig = {
   name: string;
   category: "social" | "analytics" | "support" | "productivity" | "crm";
   auth_type: "api_key" | "oauth";
-  status: "connected" | "needs_key" | "planned";
+  status: "connected" | "pending" | "needs_key" | "planned" | "error";
   description: string;
   credential_label: string;
   connected_as?: string;
   masked_secret?: string;
   connected_at?: string;
   last_sync_at?: string;
+  last_error?: string;
 };
 
 type AgentToolVendorConfig = {
@@ -165,28 +174,28 @@ const defaultIntegrations = (): IntegrationConfig[] => [
     key: "google_workspace",
     name: "Google Workspace",
     category: "productivity",
-    auth_type: "api_key",
+    auth_type: "oauth",
     status: "planned",
     description: "Unlock Gmail, Drive, and shared founder workspace context.",
-    credential_label: "Workspace key",
+    credential_label: "OAuth handoff",
   },
   {
     key: "gmail",
     name: "Gmail",
     category: "productivity",
-    auth_type: "api_key",
-    status: "needs_key",
+    auth_type: "oauth",
+    status: "planned",
     description: "Route email drafts and founder follow-ups into Northstar.",
-    credential_label: "Gmail token",
+    credential_label: "OAuth handoff",
   },
   {
     key: "google_drive",
     name: "Google Drive",
     category: "productivity",
-    auth_type: "api_key",
+    auth_type: "oauth",
     status: "planned",
     description: "Store approved assets, briefs, and research outputs.",
-    credential_label: "Drive token",
+    credential_label: "OAuth handoff",
   },
   {
     key: "intercom",
@@ -210,19 +219,19 @@ const defaultIntegrations = (): IntegrationConfig[] => [
     key: "instagram",
     name: "Instagram",
     category: "social",
-    auth_type: "api_key",
+    auth_type: "oauth",
     status: "planned",
     description: "Support social asset prep and later creator publishing flows.",
-    credential_label: "Instagram token",
+    credential_label: "OAuth handoff",
   },
   {
     key: "threads",
     name: "Threads",
     category: "social",
-    auth_type: "api_key",
+    auth_type: "oauth",
     status: "planned",
     description: "Prepare founder-ready shortform variants for Threads.",
-    credential_label: "Threads token",
+    credential_label: "OAuth handoff",
   },
   {
     key: "image_generation",
@@ -399,6 +408,19 @@ const toUiProviderStatus = (status: "NOT_CONFIGURED" | "CONFIGURED" | "ERROR", a
   return "needs_key" as const;
 };
 
+const toUiIntegrationStatus = (status: "DISCONNECTED" | "PENDING" | "CONNECTED" | "ERROR") => {
+  switch (status) {
+    case "CONNECTED":
+      return "connected" as const;
+    case "PENDING":
+      return "pending" as const;
+    case "ERROR":
+      return "error" as const;
+    default:
+      return "planned" as const;
+  }
+};
+
 const withPersistedProviderTruth = async (projectId: string, config: WorkspaceConfiguration | null): Promise<WorkspaceConfiguration | null> => {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -446,6 +468,50 @@ const withPersistedProviderTruth = async (projectId: string, config: WorkspaceCo
   };
 };
 
+const withPersistedIntegrationTruth = async (projectId: string, config: WorkspaceConfiguration | null): Promise<WorkspaceConfiguration | null> => {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { workspaceId: true }
+  });
+
+  if (!project) {
+    return config;
+  }
+
+  const connectionRecords = await prisma.integrationConnection.findMany({
+    where: { workspaceId: project.workspaceId },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (!connectionRecords.length) {
+    return config;
+  }
+
+  const baseline = config ?? buildWorkspaceConfiguration("https://northstar.local");
+  return {
+    ...baseline,
+    integrations: baseline.integrations.map((integration) => {
+      const record = connectionRecords.find((item) => item.providerKey === integration.key);
+      if (!record) {
+        return integration;
+      }
+      const metadata = record.metadataJson ? JSON.parse(record.metadataJson) as { api_key?: string } : {};
+
+      return {
+        ...integration,
+        name: record.label,
+        auth_type: record.authType as "api_key" | "oauth",
+        status: toUiIntegrationStatus(record.status),
+        connected_as: record.externalAccountId ?? integration.connected_as,
+        masked_secret: metadata.api_key ? maskSecret(metadata.api_key) : integration.masked_secret,
+        connected_at: record.updatedAt.toISOString(),
+        last_sync_at: record.lastSyncedAt?.toISOString() ?? undefined,
+        last_error: record.lastError ?? undefined
+      };
+    })
+  };
+};
+
 const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceConfiguration | null> => {
   const latest = await prisma.agentRun.findFirst({
     where: {
@@ -455,7 +521,8 @@ const getWorkspaceConfiguration = async (projectId: string): Promise<WorkspaceCo
     orderBy: { createdAt: "desc" }
   });
 
-  return withPersistedProviderTruth(projectId, parseWorkspaceConfiguration(latest?.outputJson));
+  const withProviders = await withPersistedProviderTruth(projectId, parseWorkspaceConfiguration(latest?.outputJson));
+  return withPersistedIntegrationTruth(projectId, withProviders);
 };
 
 const createWorkspaceConfigurationRun = async (projectId: string, config: WorkspaceConfiguration, summary: string) => {
@@ -964,6 +1031,19 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
   if (!providerConfig.api_key?.trim()) {
     throw createExecutionError(`${providerRecord.label} is selected, but no API key is stored for this workspace.`, 409);
   }
+  const activeJob = await prisma.executionJob.findFirst({
+    where: {
+      projectId,
+      taskId,
+      status: {
+        in: ["QUEUED", "RUNNING"]
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  if (activeJob) {
+    throw createExecutionError("This task already has an execution job in flight. Wait for it to finish before retrying.", 409);
+  }
 
   const activeProvider = {
     key: providerRecord.providerKey,
@@ -977,6 +1057,7 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       taskId,
       runType: "task_execution",
       queueName: "default",
+      dedupeKey: `task_execution:${taskId}`,
       providerConfigId: providerRecord.id,
       status: "QUEUED",
       inputJson: JSON.stringify({
@@ -984,14 +1065,6 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
         task_type: taskRecord.type,
         provider_key: activeProvider.key
       })
-    }
-  });
-  await prisma.executionJob.update({
-    where: { id: executionJob.id },
-    data: {
-      status: "RUNNING",
-      attemptCount: { increment: 1 },
-      startedAt: new Date()
     }
   });
   const latestFounderComment = await prisma.comment.findFirst({
@@ -1008,40 +1081,108 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       orderBy: { updatedAt: "desc" }
     })
     : null;
+  const executionStartedAt = new Date();
 
-  let execution;
-  try {
-    execution = await liveBlogBriefExecutor.run(
-      serializeTask(taskRecord),
-      buildExecutionCompanySummary(
-        project.companyProfile.companySummary,
-        [
-          project.founderIntake?.planningContext,
-          latestRejectedApproval?.decisionNote ?? latestFounderComment?.body
-            ? `Revision note: ${latestRejectedApproval?.decisionNote ?? latestFounderComment?.body}`
-            : null
-        ].filter((value): value is string => Boolean(value)).join("\n")
-      ),
-      project.companyProfile.guessedICP,
-      {
-        providerKey: providerRecord.providerKey === "openrouter" ? "openrouter" : "openai",
-        providerLabel: activeProvider.name,
-        apiKey: providerConfig.api_key.trim(),
-        model: providerRecord.defaultModel ?? (providerRecord.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
-        baseUrl: providerRecord.baseUrl ?? (providerRecord.providerKey === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1"),
-        revisionNote: latestRejectedApproval?.decisionNote ?? latestFounderComment?.body ?? undefined,
-      }
-    );
-  } catch (error) {
+  const executionAttempts: Array<{
+    attempt: number;
+    status: "retrying" | "failed" | "completed";
+    error?: string;
+    at: string;
+  }> = [];
+  let execution: Awaited<ReturnType<typeof liveBlogBriefExecutor.run>> | null = null;
+  let lastExecutionError = "Execution failed";
+
+  for (let attempt = 1; attempt <= MAX_EXECUTION_ATTEMPTS; attempt += 1) {
     await prisma.executionJob.update({
       where: { id: executionJob.id },
       data: {
-        status: "FAILED",
-        errorMessage: error instanceof Error ? error.message : "Execution failed",
-        completedAt: new Date()
+        status: "RUNNING",
+        attemptCount: { increment: 1 },
+        startedAt: executionStartedAt,
+        outputJson: JSON.stringify({
+          provider_key: activeProvider.key,
+          attempts: executionAttempts
+        })
       }
     });
-    throw createExecutionError(error instanceof Error ? error.message : "Execution failed", 502);
+
+    try {
+      execution = await liveBlogBriefExecutor.run(
+        serializeTask(taskRecord),
+        buildExecutionCompanySummary(
+          project.companyProfile.companySummary,
+          [
+            project.founderIntake?.planningContext,
+            latestRejectedApproval?.decisionNote ?? latestFounderComment?.body
+              ? `Revision note: ${latestRejectedApproval?.decisionNote ?? latestFounderComment?.body}`
+              : null
+          ].filter((value): value is string => Boolean(value)).join("\n")
+        ),
+        project.companyProfile.guessedICP,
+        {
+          providerKey: providerRecord.providerKey === "openrouter" ? "openrouter" : "openai",
+          providerLabel: activeProvider.name,
+          apiKey: providerConfig.api_key.trim(),
+          model: providerRecord.defaultModel ?? (providerRecord.providerKey === "openrouter" ? "openai/gpt-4.1-mini" : "gpt-4.1-mini"),
+          baseUrl: providerRecord.baseUrl ?? (providerRecord.providerKey === "openrouter" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1"),
+          revisionNote: latestRejectedApproval?.decisionNote ?? latestFounderComment?.body ?? undefined,
+        }
+      );
+      executionAttempts.push({
+        attempt,
+        status: "completed",
+        at: new Date().toISOString()
+      });
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Execution failed";
+      lastExecutionError = message;
+      const retryable = attempt < MAX_EXECUTION_ATTEMPTS && isRetryableExecutionError(message);
+      executionAttempts.push({
+        attempt,
+        status: retryable ? "retrying" : "failed",
+        error: message,
+        at: new Date().toISOString()
+      });
+
+      await prisma.executionJob.update({
+        where: { id: executionJob.id },
+        data: {
+          status: retryable ? "RUNNING" : "FAILED",
+          errorMessage: message,
+          outputJson: JSON.stringify({
+            provider_key: activeProvider.key,
+            attempts: executionAttempts
+          }),
+          ...(retryable ? {} : { completedAt: new Date() })
+        }
+      });
+
+      if (!retryable) {
+        break;
+      }
+
+      await sleep(EXECUTION_RETRY_DELAY_MS);
+    }
+  }
+
+  if (!execution) {
+    await prisma.agentRun.create({
+      data: {
+        id: nanoid(),
+        projectId,
+        taskId,
+        runType: "execution",
+        status: "failed",
+        summary: `Execution failed for ${taskRecord.title} after ${executionAttempts.length} attempt${executionAttempts.length === 1 ? "" : "s"}.`,
+        outputJson: JSON.stringify({
+          provider_key: activeProvider.key,
+          attempts: executionAttempts,
+          error: lastExecutionError
+        })
+      }
+    });
+    throw createExecutionError(lastExecutionError, 502);
   }
   const artifact = execution.artifact?.type === "BLOG_BRIEF" ? execution.artifact : null;
   let approvalId: string | null = null;
@@ -1101,6 +1242,8 @@ export const runTaskExecution = async (projectId: string, taskId: string) => {
       status: "COMPLETED",
       artifactId: artifact?.id ?? null,
       outputJson: JSON.stringify({
+        provider_key: activeProvider.key,
+        attempts: executionAttempts,
         artifact_id: artifact?.id ?? null,
         approval_id: approvalId,
         next_status: execution.nextTask.status

@@ -199,6 +199,7 @@ export interface OpenAiCompatibleTextOptions {
   userPrompt: string;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
 }
 
 const buildProviderHeaders = (options: OpenAiCompatibleTextOptions, requestUrl: string) => {
@@ -218,9 +219,12 @@ const buildProviderHeaders = (options: OpenAiCompatibleTextOptions, requestUrl: 
 
 export const requestOpenAiCompatibleText = async (options: OpenAiCompatibleTextOptions): Promise<string> => {
   const requestUrl = normalizeChatCompletionsUrl(options.baseUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
   const response = await fetch(requestUrl, {
     method: "POST",
     headers: buildProviderHeaders(options, requestUrl),
+    signal: controller.signal,
     body: JSON.stringify({
       model: options.model,
       temperature: options.temperature ?? 0.4,
@@ -236,6 +240,13 @@ export const requestOpenAiCompatibleText = async (options: OpenAiCompatibleTextO
         }
       ]
     })
+  }).catch((error) => {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`${options.providerKey} generation timed out after ${options.timeoutMs ?? 45_000}ms.`);
+    }
+    throw error;
+  }).finally(() => {
+    clearTimeout(timeout);
   });
 
   if (!response.ok) {

@@ -3,7 +3,7 @@ import type { WorkspaceSession } from "@founder-os/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { createManualTask, createTaskComment, decideApproval, getDashboard, listProjects, onboardProject, reprioritizeProjectTasks, runTaskExecution, updateTaskStatus, updateWorkspaceConfiguration } from "../services/dashboard.js";
-import { createWorkspaceSession, createWorkspaceSessionFromAccess, disconnectIntegrationConnection, getCurrentWorkspaceSession, getFounderIntake, listArtifactRevisions, listExecutionJobs, listIntegrationConnections, listProviderConfigs, requestArtifactRevision, revokeWorkspaceSession, submitArtifactRevision, upsertFounderIntake, upsertIntegrationConnection, upsertProviderConfig } from "../services/platform.js";
+import { createWorkspaceSession, createWorkspaceSessionFromAccess, disconnectIntegrationConnection, getCurrentWorkspaceSession, getFounderIntake, listArtifactRevisions, listExecutionJobs, listIntegrationConnections, listProviderConfigs, requestArtifactRevision, revalidateIntegrationConnection, revokeWorkspaceSession, submitArtifactRevision, upsertFounderIntake, upsertIntegrationConnection, upsertProviderConfig } from "../services/platform.js";
 
 const onboardSchema = z.object({
   website_url: z.string().min(3),
@@ -80,6 +80,7 @@ const connectionSchema = z.object({
   auth_type: z.string().trim().min(1),
   status: z.enum(["DISCONNECTED", "PENDING", "CONNECTED", "ERROR"]).optional(),
   external_account_id: z.string().trim().min(1).optional(),
+  api_key: z.string().trim().min(1).optional(),
   last_error: z.string().trim().min(1).optional()
 });
 
@@ -128,13 +129,14 @@ const configurationSchema = z.object({
     name: z.string().trim().min(1),
     category: z.enum(["social", "analytics", "support", "productivity", "crm"]),
     auth_type: z.enum(["api_key", "oauth"]),
-    status: z.enum(["connected", "needs_key", "planned"]),
+    status: z.enum(["connected", "pending", "needs_key", "planned", "error"]),
     description: z.string().trim().min(1),
     credential_label: z.string().trim().min(1),
     connected_as: z.string().trim().optional(),
     masked_secret: z.string().trim().optional(),
     connected_at: z.string().trim().optional(),
-    last_sync_at: z.string().trim().optional()
+    last_sync_at: z.string().trim().optional(),
+    last_error: z.string().trim().optional()
   })).optional(),
   agent_stack: z.object({
     wrappers: z.array(z.object({
@@ -837,6 +839,19 @@ export const registerRoutes = async (app: FastifyInstance) => {
 
     const { workspaceId, connectionId } = request.params as { workspaceId: string; connectionId: string };
     const connection = await disconnectIntegrationConnection(workspaceId, connectionId);
+    if (!connection) {
+      return reply.status(404).send({ error: "Connection not found" });
+    }
+    return { connection };
+  });
+
+  app.post("/workspaces/:workspaceId/connections/:connectionId/validate", async (request, reply) => {
+    if (!getWorkspaceSession(request, reply)) {
+      return;
+    }
+
+    const { workspaceId, connectionId } = request.params as { workspaceId: string; connectionId: string };
+    const connection = await revalidateIntegrationConnection(workspaceId, connectionId);
     if (!connection) {
       return reply.status(404).send({ error: "Connection not found" });
     }
