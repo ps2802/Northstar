@@ -133,15 +133,19 @@ test.describe('protected stack regression', () => {
     await expect(page.getByText('Waiting on you')).toBeVisible();
 
     await openNav(page, 'Approvals');
+    await waitForWorkspaceShell(page);
     await expect(page.getByRole('heading', { name: 'Review queue' })).toBeVisible();
 
     await openNav(page, 'Campaigns');
+    await waitForWorkspaceShell(page);
     await expect(page.getByRole('heading', { name: 'Grouped execution' })).toBeVisible();
 
     await openNav(page, 'Analytics');
+    await waitForWorkspaceShell(page);
     await expect(page.getByText('Active campaigns')).toBeVisible();
 
     await openNav(page, 'Settings');
+    await waitForWorkspaceShell(page);
     await expect(page.getByRole('heading', { name: 'Workspace context' })).toBeVisible();
   });
 
