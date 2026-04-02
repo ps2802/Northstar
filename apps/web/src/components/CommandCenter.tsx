@@ -319,13 +319,16 @@ const getWorkspaceTruthNotice = (workspaceTruth: WorkspaceTruth) => {
 };
 
 export function CommandCenter() {
-  const savedOnboardingDraft = loadStoredJson<OnboardingDraft>(ONBOARDING_DRAFT_KEY);
-  const savedFounderContext = loadStoredJson<FounderIntake>(FOUNDER_CONTEXT_KEY);
-  const savedView = loadStoredJson<{
-    page: 'onboarding' | 'dashboard';
-    activeSection: DashboardSection;
-  }>(WORKSPACE_VIEW_KEY);
-  const savedProjectId = loadStoredJson<string>(SELECTED_PROJECT_KEY);
+  const initialPersistedState = useRef({
+    savedOnboardingDraft: loadStoredJson<OnboardingDraft>(ONBOARDING_DRAFT_KEY),
+    savedFounderContext: loadStoredJson<FounderIntake>(FOUNDER_CONTEXT_KEY),
+    savedView: loadStoredJson<{
+      page: 'onboarding' | 'dashboard';
+      activeSection: DashboardSection;
+    }>(WORKSPACE_VIEW_KEY),
+    savedProjectId: loadStoredJson<string>(SELECTED_PROJECT_KEY),
+  });
+  const { savedOnboardingDraft, savedFounderContext, savedView, savedProjectId } = initialPersistedState.current;
   const hasSavedView = Boolean(savedView);
   const initialSection = savedView?.activeSection === 'command_center' ? 'board' : savedView?.activeSection ?? 'board';
   const [state, setState] = useState<AppState>(demoState);
@@ -459,7 +462,7 @@ export function CommandCenter() {
     return () => {
       cancelled = true;
     };
-  }, [bootstrapRetryKey, hasSavedView, savedProjectId, savedView?.activeSection]);
+  }, [bootstrapRetryKey, hasSavedView, savedProjectId, savedView]);
 
   useEffect(() => {
     persistStoredJson(WORKSPACE_VIEW_KEY, {
