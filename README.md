@@ -10,7 +10,7 @@ A founder connects a website, adds business context, answers follow-up questions
 - The board is the main product surface. Founder review stays in the loop before anything moves forward.
 - `blog_brief` is the only live generation path exposed in the founder product. Other task types are planning-only in this build.
 - Founder access now uses server-issued workspace sessions tied to founder email plus workspace website, not a local founder-session toggle.
-- Execution-provider state is validated on save for the supported OpenRouter/OpenAI-compatible path. Most non-provider integrations still remain saved workspace state, not validated downstream truth.
+- Execution-provider state is validated on save for the supported OpenRouter/OpenAI-compatible path. Supported API-key integrations now return explicit `connected`, `pending`, `error`, or `not set up` truth instead of implying success from saved credentials alone.
 - Sample, cached stale, fallback understanding, and incomplete context states are explicitly marked in the UI.
 - All non-health product routes require a founder session header. Public bootstrap is limited to onboarding.
 
@@ -34,6 +34,7 @@ Audit references:
 - founder comments, rejection notes, and revision requests now feed back into Northstar's planning context so future prioritization and revisions adapt
 - onboarding can restore an existing workspace session before creating a duplicate workspace
 - provider setup, provider validation, integration setup, and persisted workspace configuration with masked display fields
+- protected-stack QA coverage for authenticated board, approvals, campaigns, analytics, settings, and live `blog_brief` execution
 - agent-stack wrapper selection for identity, execution, browser, search, memory, payments, SaaS access, and voice
 - demo CRM and research panels
 
@@ -41,7 +42,7 @@ Audit references:
 
 - every task type except `blog_brief` is planning-only
 - stronger verified identity flows like OAuth or magic-link email auth are still not present
-- many integrations persist saved access state but do not validate or deliver real downstream work
+- only the currently supported integration checks validate live downstream truth; broader delivery and validation depth are still incomplete
 - agent-stack wrappers are preference selections only, not live vendor integrations or validated capability rails
 - CRM/research panels are still demo-grade rather than end-to-end live workflows
 

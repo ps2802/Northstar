@@ -3,8 +3,8 @@ import type { ExecutionProvider, Integration } from './types';
 export type AccountHealth = 'connected' | 'needs_reconnect' | 'not_connected';
 
 export const accountHealthLabel: Record<AccountHealth, string> = {
-  connected: 'Saved, unverified',
-  needs_reconnect: 'Credential missing',
+  connected: 'Validated',
+  needs_reconnect: 'Needs attention',
   not_connected: 'Not set up',
 };
 
@@ -25,7 +25,8 @@ export const getIntegrationHealth = (integration: Integration): AccountHealth =>
     return 'connected';
   }
 
-  if (integration.status === 'needs_key' && (integration.connectedAs || integration.maskedSecret || integration.connectedAt)) {
+  if ((integration.status === 'pending' || integration.status === 'error' || integration.status === 'needs_key')
+    && (integration.connectedAs || integration.maskedSecret || integration.connectedAt || integration.lastError)) {
     return 'needs_reconnect';
   }
 

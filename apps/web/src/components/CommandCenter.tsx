@@ -601,8 +601,10 @@ export function CommandCenter() {
   );
 
   const accountSummary = useMemo(() => ({
-    saved_unverified: state.integrations.filter((integration) => integration.status === 'connected').length,
+    connected: state.integrations.filter((integration) => integration.status === 'connected').length,
+    pending: state.integrations.filter((integration) => integration.status === 'pending').length,
     needs_key: state.integrations.filter((integration) => integration.status === 'needs_key').length,
+    error: state.integrations.filter((integration) => integration.status === 'error').length,
     planned: state.integrations.filter((integration) => integration.status === 'planned').length,
   }), [state.integrations]);
 
@@ -1299,8 +1301,10 @@ export function CommandCenter() {
               <article className="settings-detail-card">
                 <span>Workflow tools</span>
                 <div className="settings-chip-row">
-                  <span className="connection-status-connected">{accountSummary.saved_unverified} saved, unverified</span>
+                  <span className="connection-status-connected">{accountSummary.connected} validated</span>
+                  <span className="connection-status-needs_key">{accountSummary.pending} pending validation</span>
                   <span className="connection-status-needs_key">{accountSummary.needs_key} credentials missing</span>
+                  <span className="connection-status-needs_key">{accountSummary.error} validation failed</span>
                   <span className="connection-status-planned">{accountSummary.planned} not set up</span>
                 </div>
               </article>
@@ -1344,9 +1348,13 @@ export function CommandCenter() {
                       <strong>{integration.name}</strong>
                       <span>
                         {integration.status === 'connected'
-                          ? 'Saved, unverified'
+                          ? 'Validated'
+                          : integration.status === 'pending'
+                            ? 'Pending validation'
                           : integration.status === 'needs_key'
                             ? 'Credential required'
+                            : integration.status === 'error'
+                              ? 'Validation failed'
                             : 'Not set up'}
                       </span>
                     </div>
@@ -1568,7 +1576,10 @@ export function CommandCenter() {
                   </label>
                   <div className="workspace-connection-strip" aria-label="Connection truth">
                     <span className="workspace-connection-chip connection-status-connected">
-                      {accountSummary.saved_unverified} saved, unverified
+                      {accountSummary.connected} validated
+                    </span>
+                    <span className="workspace-connection-chip connection-status-needs_key">
+                      {accountSummary.pending} pending validation
                     </span>
                     <span className="workspace-connection-chip connection-status-needs_key">
                       {accountSummary.needs_key} credentials missing

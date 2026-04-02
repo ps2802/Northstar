@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "test:protected": "PLAYWRIGHT_PROTECTED=1 playwright test tests/protected-stack.spec.ts"
   },
   "dependencies": {
     "react": "^19.1.0",

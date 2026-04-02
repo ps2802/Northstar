@@ -1,6 +1,6 @@
 # Northstar Build Plan
 
-Status date: March 28, 2026
+Status date: April 2, 2026
 
 Historical rebuild waves are complete enough for demo use. The current phase is a truth and trust pass, not a redesign pass.
 
@@ -36,12 +36,15 @@ Historical rebuild waves are complete enough for demo use. The current phase is 
 - validate supported execution-provider credentials when the founder saves them
 - reflect validated provider truth back into the Connections, Settings, and board-adjacent trust surfaces
 - verified one live OpenRouter `blog_brief` execution end to end: task to artifact to pending approval
+- added honest validation states for supported API-key integrations and removed local UI truth overrides from integration setup
+- added protected-stack browser regression coverage for authenticated shell rendering and live `blog_brief` execution
 
 ## External pilot blockers still open
 
-- most integrations still do not validate or deliver real downstream work
-- execution jobs still need stronger failure recovery than the current inline flow
+- broader integration delivery still remains incomplete beyond the currently supported validation checks
+- execution jobs still need stronger failure recovery than the current inline flow, even though retryable failures are now recorded more explicitly
 - stronger verified identity flows like OAuth or magic-link email auth are still not present
+- the deployed protected stack still needs one clean QA pass on the latest build before calling the external trust pass complete
 
 ## Batch 2, explicitly later
 

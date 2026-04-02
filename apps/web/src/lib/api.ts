@@ -190,6 +190,7 @@ interface BackendWorkspaceConfiguration {
     masked_secret?: string;
     connected_at?: string;
     last_sync_at?: string;
+    last_error?: string;
   }>;
   agent_stack?: {
     wrappers: Array<{
@@ -954,6 +955,7 @@ const mapDashboard = (dashboard: BackendDashboard): AppState => {
       maskedSecret: integration.masked_secret,
       connectedAt: integration.connected_at,
       lastSyncAt: integration.last_sync_at,
+      lastError: integration.last_error,
     }))
     : getDefaultIntegrations();
 
@@ -1225,6 +1227,7 @@ const buildWorkspaceConfigurationPayload = (overrides?: {
     masked_secret: integration.maskedSecret,
     connected_at: integration.connectedAt,
     last_sync_at: integration.lastSyncAt,
+    last_error: integration.lastError,
   })),
   agent_stack: {
     wrappers: (overrides?.agentToolWrappers ?? latestState.agentToolWrappers).map((wrapper) => ({
@@ -1669,21 +1672,18 @@ export const createFounderApi = (): FounderApi => ({
       throw createMutationError(`Add an API key before connecting ${integration.name}.`);
     }
 
-    const connectedAt = new Date().toISOString();
-    const integrations: Integration[] = latestState.integrations.map((current): Integration => current.id === integrationId ? ({
-      ...current,
-      status: "connected",
-      connectedAs: undefined,
-      maskedSecret: current.authType === "api_key" ? maskSecret(credential ?? "") : current.maskedSecret,
-      connectedAt,
-      lastSyncAt: undefined,
-    }) : current);
-
-    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-      method: "POST",
-      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
+    await fetchJson(`/workspaces/${latestState.project.workspaceId}/connections/${integration.id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        label: integration.name,
+        auth_type: integration.authType,
+        status: "PENDING",
+        api_key: credential?.trim(),
+      })
     });
-    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
+
+    const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   disconnectIntegration: async (integrationId: string) => {
     const sessionHealth = requireLiveSession();
@@ -1692,29 +1692,46 @@ export const createFounderApi = (): FounderApi => ({
       throw createMutationError("Integration not found.");
     }
 
-    const integrations: Integration[] = latestState.integrations.map((current): Integration => current.id === integrationId ? ({
-      ...current,
-      status: (current.authType === "api_key" ? "needs_key" : "planned") as Integration["status"],
-      connectedAs: undefined,
-      maskedSecret: undefined,
-      connectedAt: undefined,
-      lastSyncAt: undefined,
-    }) : current);
+    const persistedConnection = await fetchJson<{
+      connections: Array<{
+        id: string;
+        provider_key: string;
+      }>;
+    }>(`/workspaces/${latestState.project.workspaceId}/connections`);
+    const activeConnection = persistedConnection.connections.find((entry) => entry.provider_key === integrationId);
+    if (activeConnection) {
+      await fetchJson(`/workspaces/${latestState.project.workspaceId}/connections/${activeConnection.id}`, {
+        method: "DELETE"
+      });
+    }
 
-    const response = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/configuration`, {
-      method: "POST",
-      body: JSON.stringify(buildWorkspaceConfigurationPayload({ integrations }))
-    });
-    return persistAndReturn(mapDashboard(response.dashboard), getLiveWorkspaceTruth(sessionHealth));
+    const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   syncIntegration: async (integrationId: string) => {
-    requireLiveSession();
+    const sessionHealth = requireLiveSession();
     const integration = latestState.integrations.find((item) => item.id === integrationId);
     if (!integration) {
       throw createMutationError("Integration not found.");
     }
 
-    throw createMutationError(`Live validation for ${integration.name} is not available in this workspace yet.`);
+    const persistedConnection = await fetchJson<{
+      connections: Array<{
+        id: string;
+        provider_key: string;
+      }>;
+    }>(`/workspaces/${latestState.project.workspaceId}/connections`);
+    const activeConnection = persistedConnection.connections.find((entry) => entry.provider_key === integrationId);
+    if (!activeConnection) {
+      throw createMutationError(`${integration.name} has not been connected in this workspace yet.`);
+    }
+
+    await fetchJson(`/workspaces/${latestState.project.workspaceId}/connections/${activeConnection.id}/validate`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    const dashboardResponse = await fetchJson<{ dashboard: BackendDashboard }>(`/projects/${latestState.project.id}/dashboard`);
+    return persistAndReturn(mapDashboard(dashboardResponse.dashboard), getLiveWorkspaceTruth(sessionHealth));
   },
   selectAgentToolVendor: async (wrapperId: AgentToolCategory, vendorId: string) => {
     const sessionHealth = requireLiveSession();
