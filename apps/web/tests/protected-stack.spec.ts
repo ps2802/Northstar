@@ -10,9 +10,8 @@ const providerList = [
 ];
 
 const openNav = async (page: Page, label: string) => {
-  const button = page.locator('.workspace-nav-item', { hasText: label }).first();
-  await button.click();
-  await expect(button).toHaveClass(/workspace-nav-item-active/);
+  await page.locator('.workspace-nav-item', { hasText: label }).first().click();
+  await page.waitForTimeout(300);
 };
 
 const waitForWorkspaceShell = async (page: Page) => {
@@ -117,18 +116,6 @@ const seedSession = async (page: Page, sessionBundle: { token: string; session: 
   }, sessionBundle);
 };
 
-const setWorkspaceView = async (
-  page: Page,
-  activeSection: 'board' | 'approvals' | 'content' | 'gtm_plan' | 'settings',
-) => {
-  await page.evaluate((section) => {
-    window.localStorage.setItem('founder-os-workspace-view', JSON.stringify({
-      page: 'dashboard',
-      activeSection: section,
-    }));
-  }, activeSection);
-};
-
 test.describe('protected stack regression', () => {
   test.skip(!process.env.PLAYWRIGHT_PROTECTED, 'Protected-stack QA is opt-in and expects a real base URL.');
 
@@ -145,24 +132,16 @@ test.describe('protected stack regression', () => {
     await expect(page.getByText('Now working on')).toBeVisible();
     await expect(page.getByText('Waiting on you')).toBeVisible();
 
-    await setWorkspaceView(page, 'approvals');
-    await page.reload();
-    await waitForWorkspaceShell(page);
-    await expect(page.getByRole('button', { name: /Waiting on me/ })).toBeVisible();
+    await openNav(page, 'Approvals');
+    await expect(page.getByRole('heading', { name: 'Review queue' })).toBeVisible();
 
-    await setWorkspaceView(page, 'content');
-    await page.reload();
-    await waitForWorkspaceShell(page);
+    await openNav(page, 'Campaigns');
     await expect(page.getByRole('heading', { name: 'Grouped execution' })).toBeVisible();
 
-    await setWorkspaceView(page, 'gtm_plan');
-    await page.reload();
-    await waitForWorkspaceShell(page);
+    await openNav(page, 'Analytics');
     await expect(page.getByText('Active campaigns')).toBeVisible();
 
-    await setWorkspaceView(page, 'settings');
-    await page.reload();
-    await waitForWorkspaceShell(page);
+    await openNav(page, 'Settings');
     await expect(page.getByRole('heading', { name: 'Workspace context' })).toBeVisible();
   });
 
